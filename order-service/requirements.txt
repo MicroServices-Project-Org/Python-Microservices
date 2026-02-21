@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+sqlalchemy
+asyncpg
+alembic
+greenlet
+pydantic
+pydantic-settings
+python-multipart
+httpx
+aiokafka
+tenacity
