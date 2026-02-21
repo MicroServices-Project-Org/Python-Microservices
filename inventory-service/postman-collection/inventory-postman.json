@@ -1,0 +1,527 @@
+{
+  "info": {
+    "name": "Inventory Service",
+    "description": "Complete API collection for the Inventory Service microservice.\n\nBase URL: http://localhost:8003\n\nRun requests in order for a full verification flow:\n1. Health Check\n2. Create Inventory Items\n3. Get All Inventory\n4. Get by Product ID\n5. Check Stock\n6. Reduce Stock\n7. Restock\n8. Update Inventory\n9. Delete Inventory",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8003",
+      "type": "string"
+    },
+    {
+      "key": "product_id_1",
+      "value": "prod-001",
+      "type": "string"
+    },
+    {
+      "key": "product_id_2",
+      "value": "prod-002",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Service is UP', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.status).to.eql('UP');",
+                  "  pm.expect(json.service).to.eql('inventory-service');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            },
+            "description": "Verify the service is running and connected to PostgreSQL."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Inventory",
+      "item": [
+        {
+          "name": "Create Inventory — iPhone 15 Pro",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', () => {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test('Inventory created with correct fields', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.product_id).to.eql('prod-001');",
+                  "  pm.expect(json.quantity).to.eql(100);",
+                  "  pm.expect(json.reserved_qty).to.eql(0);",
+                  "  pm.expect(json.available_qty).to.eql(100);",
+                  "});",
+                  "pm.test('UUID is present', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.id).to.match(/^[0-9a-f-]{36}$/);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_id\": \"prod-001\",\n  \"product_name\": \"iPhone 15 Pro\",\n  \"quantity\": 100\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/inventory",
+              "host": ["{{base_url}}"],
+              "path": ["api", "inventory"]
+            },
+            "description": "Add iPhone 15 Pro to inventory with 100 units."
+          }
+        },
+        {
+          "name": "Create Inventory — Samsung S24",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', () => {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test('Samsung created correctly', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.product_id).to.eql('prod-002');",
+                  "  pm.expect(json.quantity).to.eql(50);",
+                  "  pm.expect(json.available_qty).to.eql(50);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_id\": \"prod-002\",\n  \"product_name\": \"Samsung S24\",\n  \"quantity\": 50\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/inventory",
+              "host": ["{{base_url}}"],
+              "path": ["api", "inventory"]
+            },
+            "description": "Add Samsung S24 to inventory with 50 units."
+          }
+        },
+        {
+          "name": "Create Inventory — Duplicate (409 Conflict)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 409', () => {",
+                  "  pm.response.to.have.status(409);",
+                  "});",
+                  "pm.test('Conflict error returned', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.detail).to.include('already exists');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_id\": \"prod-001\",\n  \"product_name\": \"iPhone 15 Pro\",\n  \"quantity\": 100\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/inventory",
+              "host": ["{{base_url}}"],
+              "path": ["api", "inventory"]
+            },
+            "description": "Verify 409 Conflict is returned when creating a duplicate product_id."
+          }
+        },
+        {
+          "name": "Get All Inventory",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Returns array', () => {",
+                  "  pm.expect(pm.response.json()).to.be.an('array');",
+                  "});",
+                  "pm.test('At least 2 items exist', () => {",
+                  "  pm.expect(pm.response.json().length).to.be.at.least(2);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/inventory",
+              "host": ["{{base_url}}"],
+              "path": ["api", "inventory"]
+            },
+            "description": "Get all inventory items."
+          }
+        },
+        {
+          "name": "Get Inventory by Product ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Returns correct product', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.product_id).to.eql('prod-001');",
+                  "  pm.expect(json.product_name).to.eql('iPhone 15 Pro');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/inventory/{{product_id_1}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "inventory", "{{product_id_1}}"]
+            },
+            "description": "Get inventory for a specific product by product_id."
+          }
+        },
+        {
+          "name": "Get Inventory — Not Found",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 404', () => {",
+                  "  pm.response.to.have.status(404);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/inventory/prod-nonexistent",
+              "host": ["{{base_url}}"],
+              "path": ["api", "inventory", "prod-nonexistent"]
+            },
+            "description": "Verify 404 is returned for non-existent product_id."
+          }
+        },
+        {
+          "name": "Check Stock — In Stock",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('in_stock is true', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.in_stock).to.be.true;",
+                  "  pm.expect(json.requested).to.eql(10);",
+                  "  pm.expect(json.product_id).to.eql('prod-001');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/inventory/{{product_id_1}}/check?quantity=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "inventory", "{{product_id_1}}", "check"],
+              "query": [{"key": "quantity", "value": "10"}]
+            },
+            "description": "Check if 10 units of prod-001 are available. Used by Order Service."
+          }
+        },
+        {
+          "name": "Check Stock — Out of Stock",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('in_stock is false for excessive quantity', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.in_stock).to.be.false;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/inventory/{{product_id_1}}/check?quantity=99999",
+              "host": ["{{base_url}}"],
+              "path": ["api", "inventory", "{{product_id_1}}", "check"],
+              "query": [{"key": "quantity", "value": "99999"}]
+            },
+            "description": "Check if 99999 units are available. Should return in_stock: false."
+          }
+        },
+        {
+          "name": "Reduce Stock",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Quantity reduced by 5', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.available_qty).to.eql(95);",
+                  "});",
+                  "pm.test('updated_at changed', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(new Date(json.updated_at)).to.be.above(new Date(json.created_at));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": 5\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/inventory/{{product_id_1}}/reduce",
+              "host": ["{{base_url}}"],
+              "path": ["api", "inventory", "{{product_id_1}}", "reduce"]
+            },
+            "description": "Reduce stock by 5 units. Simulates an order being placed."
+          }
+        },
+        {
+          "name": "Reduce Stock — Insufficient Stock",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 400', () => {",
+                  "  pm.response.to.have.status(400);",
+                  "});",
+                  "pm.test('Insufficient stock error returned', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.detail).to.include('Insufficient stock');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": 99999\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/inventory/{{product_id_1}}/reduce",
+              "host": ["{{base_url}}"],
+              "path": ["api", "inventory", "{{product_id_1}}", "reduce"]
+            },
+            "description": "Verify 400 is returned when trying to reduce more than available stock."
+          }
+        },
+        {
+          "name": "Restock",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Quantity increased by 20', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.available_qty).to.eql(115);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": 20\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/inventory/{{product_id_1}}/restock",
+              "host": ["{{base_url}}"],
+              "path": ["api", "inventory", "{{product_id_1}}", "restock"]
+            },
+            "description": "Add 20 units to stock. Simulates a new shipment arriving."
+          }
+        },
+        {
+          "name": "Update Inventory",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Product name updated', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.product_name).to.eql('iPhone 15 Pro Max');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_name\": \"iPhone 15 Pro Max\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/inventory/{{product_id_1}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "inventory", "{{product_id_1}}"]
+            },
+            "description": "Update product name. Only provided fields are updated."
+          }
+        },
+        {
+          "name": "Delete Inventory",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Success message returned', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.message).to.include('deleted successfully');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/inventory/{{product_id_2}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "inventory", "{{product_id_2}}"]
+            },
+            "description": "Delete inventory item for prod-002."
+          }
+        },
+        {
+          "name": "Delete Inventory — Verify Deleted",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 404 after deletion', () => {",
+                  "  pm.response.to.have.status(404);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/inventory/{{product_id_2}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "inventory", "{{product_id_2}}"]
+            },
+            "description": "Confirm the deleted product returns 404."
+          }
+        }
+      ]
+    }
+  ]
+}
