@@ -1,0 +1,402 @@
+{
+  "info": {
+    "name": "API Gateway",
+    "description": "Test collection for API Gateway — all requests go through port 9000. Tests routing, auth, rate limiting, and error handling.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "gateway_url",
+      "value": "http://localhost:9000"
+    },
+    {
+      "key": "token",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "item": [
+        {
+          "name": "Gateway Health",
+          "request": {
+            "method": "GET",
+            "url": "{{gateway_url}}/health",
+            "description": "Verify the API Gateway is running. Shows auth_enabled status."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Products (via Gateway)",
+      "item": [
+        {
+          "name": "List All Products",
+          "request": {
+            "method": "GET",
+            "url": "{{gateway_url}}/api/products",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "Only needed when AUTH_ENABLED=true",
+                "disabled": true
+              }
+            ],
+            "description": "Proxied to Product Service :8001"
+          }
+        },
+        {
+          "name": "Create Product",
+          "request": {
+            "method": "POST",
+            "url": "{{gateway_url}}/api/products",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"AirPods Pro\",\n  \"description\": \"Wireless earbuds with ANC\",\n  \"price\": 249.99,\n  \"category\": \"Electronics\",\n  \"tags\": [\"audio\", \"apple\", \"wireless\"],\n  \"stock_quantity\": 200\n}"
+            },
+            "description": "Create a product through the gateway."
+          }
+        },
+        {
+          "name": "Search Products",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{gateway_url}}/api/products/search?q=iphone",
+              "host": ["{{gateway_url}}"],
+              "path": ["api", "products", "search"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "iphone"
+                }
+              ]
+            },
+            "description": "Tests query parameter forwarding through the gateway."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Orders (via Gateway)",
+      "item": [
+        {
+          "name": "List All Orders",
+          "request": {
+            "method": "GET",
+            "url": "{{gateway_url}}/api/orders",
+            "description": "Proxied to Order Service :8002"
+          }
+        },
+        {
+          "name": "Place Order",
+          "request": {
+            "method": "POST",
+            "url": "{{gateway_url}}/api/orders",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_name\": \"Yash Vyas\",\n  \"customer_email\": \"yash@example.com\",\n  \"items\": [\n    {\n      \"product_id\": \"prod-001\",\n      \"product_name\": \"iPhone 15 Pro\",\n      \"quantity\": 1,\n      \"unit_price\": 999.99\n    }\n  ]\n}"
+            },
+            "description": "Place an order through the gateway. Triggers the full Kafka flow (Notification + AI personalization)."
+          }
+        },
+        {
+          "name": "Get Order by ID",
+          "request": {
+            "method": "GET",
+            "url": "{{gateway_url}}/api/orders/PASTE_ORDER_ID_HERE",
+            "description": "Replace with actual UUID from Place Order response."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Inventory (via Gateway)",
+      "item": [
+        {
+          "name": "List All Inventory",
+          "request": {
+            "method": "GET",
+            "url": "{{gateway_url}}/api/inventory",
+            "description": "Proxied to Inventory Service :8003"
+          }
+        },
+        {
+          "name": "Add Inventory",
+          "request": {
+            "method": "POST",
+            "url": "{{gateway_url}}/api/inventory",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_id\": \"prod-gw-001\",\n  \"product_name\": \"MacBook Air M3\",\n  \"quantity\": 75\n}"
+            },
+            "description": "Add inventory through the gateway."
+          }
+        },
+        {
+          "name": "Check Stock",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{gateway_url}}/api/inventory/prod-gw-001/check?quantity=5",
+              "host": ["{{gateway_url}}"],
+              "path": ["api", "inventory", "prod-gw-001", "check"],
+              "query": [
+                {
+                  "key": "quantity",
+                  "value": "5"
+                }
+              ]
+            },
+            "description": "Check stock availability through the gateway. Tests query parameter forwarding."
+          }
+        }
+      ]
+    },
+    {
+      "name": "AI (via Gateway)",
+      "item": [
+        {
+          "name": "Chat",
+          "request": {
+            "method": "POST",
+            "url": "{{gateway_url}}/api/ai/chat",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"What products do you have?\"\n}"
+            },
+            "description": "AI chatbot through the gateway. Rate limited to 15/minute."
+          }
+        },
+        {
+          "name": "Recommendations",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{gateway_url}}/api/ai/recommendations?product_name=iPhone 15 Pro&category=Electronics",
+              "host": ["{{gateway_url}}"],
+              "path": ["api", "ai", "recommendations"],
+              "query": [
+                {
+                  "key": "product_name",
+                  "value": "iPhone 15 Pro"
+                },
+                {
+                  "key": "category",
+                  "value": "Electronics"
+                }
+              ]
+            },
+            "description": "AI recommendations through the gateway."
+          }
+        },
+        {
+          "name": "Smart Search",
+          "request": {
+            "method": "POST",
+            "url": "{{gateway_url}}/api/ai/suggest",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"birthday gift for a tech lover\"\n}"
+            },
+            "description": "AI smart search through the gateway."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Error Handling",
+      "item": [
+        {
+          "name": "Service Unavailable (stop a service first)",
+          "request": {
+            "method": "GET",
+            "url": "{{gateway_url}}/api/orders",
+            "description": "Stop the Order Service first, then run this. Should return 503 Service Unavailable."
+          }
+        },
+        {
+          "name": "Not Found (invalid ID)",
+          "request": {
+            "method": "GET",
+            "url": "{{gateway_url}}/api/products/nonexistent-id",
+            "description": "Should return 404 forwarded from Product Service."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth (when AUTH_ENABLED=true)",
+      "description": "These tests only work when AUTH_ENABLED=true and Keycloak is configured.",
+      "item": [
+        {
+          "name": "Get Token from Keycloak",
+          "request": {
+            "method": "POST",
+            "url": "http://localhost:8081/realms/microservices/protocol/openid-connect/token",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "client_id", "value": "api-gateway" },
+                { "key": "username", "value": "testuser" },
+                { "key": "password", "value": "testpass" },
+                { "key": "grant_type", "value": "password" }
+              ]
+            },
+            "description": "Get a JWT from Keycloak. Copy the access_token from the response and set it as the 'token' collection variable."
+          }
+        },
+        {
+          "name": "Request Without Token (should fail)",
+          "request": {
+            "method": "GET",
+            "url": "{{gateway_url}}/api/products",
+            "description": "Should return 401 Unauthorized when AUTH_ENABLED=true and no token is provided."
+          }
+        },
+        {
+          "name": "Request With Valid Token",
+          "request": {
+            "method": "GET",
+            "url": "{{gateway_url}}/api/products",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "description": "Should succeed when AUTH_ENABLED=true and a valid token is provided."
+          }
+        },
+        {
+          "name": "Request With Expired Token",
+          "request": {
+            "method": "GET",
+            "url": "{{gateway_url}}/api/products",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer expired-token-here"
+              }
+            ],
+            "description": "Should return 401 or 403 when the token is expired or invalid."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Full End-to-End via Gateway",
+      "description": "Complete flow through the gateway: add inventory → place order → triggers Kafka → AI personalization → notification email.",
+      "item": [
+        {
+          "name": "1. Add Inventory",
+          "request": {
+            "method": "POST",
+            "url": "{{gateway_url}}/api/inventory",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_id\": \"prod-e2e-001\",\n  \"product_name\": \"iPad Pro\",\n  \"quantity\": 30\n}"
+            }
+          }
+        },
+        {
+          "name": "2. Create Product",
+          "request": {
+            "method": "POST",
+            "url": "{{gateway_url}}/api/products",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"iPad Pro\",\n  \"description\": \"M4 chip tablet\",\n  \"price\": 1099.99,\n  \"category\": \"Electronics\",\n  \"tags\": [\"tablet\", \"apple\"],\n  \"stock_quantity\": 30\n}"
+            }
+          }
+        },
+        {
+          "name": "3. Place Order",
+          "request": {
+            "method": "POST",
+            "url": "{{gateway_url}}/api/orders",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_name\": \"Yash Vyas\",\n  \"customer_email\": \"yash@example.com\",\n  \"items\": [\n    {\n      \"product_id\": \"prod-e2e-001\",\n      \"product_name\": \"iPad Pro\",\n      \"quantity\": 1,\n      \"unit_price\": 1099.99\n    }\n  ]\n}"
+            },
+            "description": "After placing this order, check:\n- Order Service terminal: order confirmed\n- AI Service terminal: 🤖 Personalizing → ✅ Published\n- Notification Service terminal: 📧 confirmation email + 🤖 personalized email"
+          }
+        },
+        {
+          "name": "4. Check AI Chatbot",
+          "request": {
+            "method": "POST",
+            "url": "{{gateway_url}}/api/ai/chat",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"What tablets do you have?\"\n}"
+            },
+            "description": "The chatbot should now reference the iPad Pro in its response."
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+pydantic-settings
+httpx
+slowapi
+PyJWT[crypto]
+
+# Testing
+pytest
+pytest-asyncio
