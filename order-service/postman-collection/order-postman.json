@@ -1,0 +1,467 @@
+{
+  "info": {
+    "name": "Order Service",
+    "description": "Complete API collection for the Order Service microservice.\n\nBase URL: http://localhost:8002\n\nPrerequisites:\n- Inventory Service running on port 8003\n- prod-001 exists in inventory with sufficient stock\n\nRun in order:\n1. Health Check\n2. Place Order (single item)\n3. Place Order (multi item)\n4. Get All Orders\n5. Get Order by ID\n6. Get Orders by Email\n7. Update Status\n8. Cancel Order\n9. Edge cases",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8002",
+      "type": "string"
+    },
+    {
+      "key": "inventory_url",
+      "value": "http://localhost:8003",
+      "type": "string"
+    },
+    {
+      "key": "order_id",
+      "value": "",
+      "type": "string",
+      "description": "Auto-populated after Place Order"
+    },
+    {
+      "key": "cancel_order_id",
+      "value": "",
+      "type": "string",
+      "description": "Auto-populated for cancel test"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Service is UP', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.status).to.eql('UP');",
+                  "  pm.expect(json.service).to.eql('order-service');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Orders",
+      "item": [
+        {
+          "name": "Place Order — Single Item",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Order created correctly', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.id).to.be.a('string');",
+                  "  pm.expect(json.order_number).to.match(/^ORD-/);",
+                  "  pm.expect(json.status).to.eql('CONFIRMED');",
+                  "  pm.expect(json.total_amount).to.eql(1999.98);",
+                  "  pm.expect(json.items).to.have.lengthOf(1);",
+                  "  pm.collectionVariables.set('order_id', json.id);",
+                  "  console.log('Order ID saved:', json.id);",
+                  "});",
+                  "pm.test('Order number has correct format', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.order_number).to.match(/^ORD-\\d{8}-[A-Z0-9]{8}$/);",
+                  "});",
+                  "pm.test('Item total is correct', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.items[0].total_price).to.eql(1999.98);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_name\": \"Yash Vyas\",\n  \"customer_email\": \"yash@example.com\",\n  \"items\": [\n    {\n      \"product_id\": \"prod-001\",\n      \"product_name\": \"iPhone 15 Pro\",\n      \"quantity\": 2,\n      \"unit_price\": 999.99\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/orders",
+              "host": ["{{base_url}}"],
+              "path": ["api", "orders"]
+            },
+            "description": "Place a single-item order. Saves order_id for subsequent requests."
+          }
+        },
+        {
+          "name": "Place Order — Multiple Items",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Multi-item total is correct', () => {",
+                  "  const json = pm.response.json();",
+                  "  // 2 * 999.99 + 1 * 249.99 = 2249.97",
+                  "  pm.expect(json.total_amount).to.eql(2249.97);",
+                  "  pm.expect(json.items).to.have.lengthOf(2);",
+                  "});",
+                  "pm.test('Save cancel order ID', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.collectionVariables.set('cancel_order_id', json.id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_name\": \"Yash Vyas\",\n  \"customer_email\": \"yash@example.com\",\n  \"items\": [\n    {\n      \"product_id\": \"prod-001\",\n      \"product_name\": \"iPhone 15 Pro\",\n      \"quantity\": 2,\n      \"unit_price\": 999.99\n    },\n    {\n      \"product_id\": \"prod-002\",\n      \"product_name\": \"AirPods Pro\",\n      \"quantity\": 1,\n      \"unit_price\": 249.99\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/orders",
+              "host": ["{{base_url}}"],
+              "path": ["api", "orders"]
+            },
+            "description": "Place a multi-item order. Verifies total is sum of all items."
+          }
+        },
+        {
+          "name": "Place Order — Out of Stock (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Insufficient stock error returned', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.detail).to.include('Insufficient stock');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_name\": \"Yash Vyas\",\n  \"customer_email\": \"yash@example.com\",\n  \"items\": [\n    {\n      \"product_id\": \"prod-001\",\n      \"product_name\": \"iPhone 15 Pro\",\n      \"quantity\": 999999,\n      \"unit_price\": 999.99\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/orders",
+              "host": ["{{base_url}}"],
+              "path": ["api", "orders"]
+            },
+            "description": "Verify 400 is returned when requesting more stock than available."
+          }
+        },
+        {
+          "name": "Place Order — Empty Items (422)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 422', () => pm.response.to.have.status(422));",
+                  "pm.test('Validation error for empty items', () => {",
+                  "  pm.expect(pm.response.json().detail).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_name\": \"Yash Vyas\",\n  \"customer_email\": \"yash@example.com\",\n  \"items\": []\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/orders",
+              "host": ["{{base_url}}"],
+              "path": ["api", "orders"]
+            },
+            "description": "Verify 422 is returned when items list is empty."
+          }
+        },
+        {
+          "name": "Get All Orders",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Returns array', () => {",
+                  "  pm.expect(pm.response.json()).to.be.an('array');",
+                  "});",
+                  "pm.test('At least 2 orders exist', () => {",
+                  "  pm.expect(pm.response.json().length).to.be.at.least(2);",
+                  "});",
+                  "pm.test('Each order has items', () => {",
+                  "  pm.response.json().forEach(order => {",
+                  "    pm.expect(order.items).to.be.an('array');",
+                  "  });",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/orders",
+              "host": ["{{base_url}}"],
+              "path": ["api", "orders"]
+            }
+          }
+        },
+        {
+          "name": "Get Order by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Returns correct order', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.id).to.eql(pm.collectionVariables.get('order_id'));",
+                  "  pm.expect(json.items).to.be.an('array').with.lengthOf.above(0);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/orders/{{order_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "orders", "{{order_id}}"]
+            },
+            "description": "Fetch a specific order by UUID. Uses saved order_id."
+          }
+        },
+        {
+          "name": "Get Order by ID — Not Found (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/orders/00000000-0000-0000-0000-000000000000",
+              "host": ["{{base_url}}"],
+              "path": ["api", "orders", "00000000-0000-0000-0000-000000000000"]
+            }
+          }
+        },
+        {
+          "name": "Get Order by ID — Invalid ID (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/orders/not-a-uuid",
+              "host": ["{{base_url}}"],
+              "path": ["api", "orders", "not-a-uuid"]
+            }
+          }
+        },
+        {
+          "name": "Get Orders by Email",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Returns orders for this email', () => {",
+                  "  const orders = pm.response.json();",
+                  "  pm.expect(orders).to.be.an('array');",
+                  "  orders.forEach(o => {",
+                  "    pm.expect(o.customer_email).to.eql('yash@example.com');",
+                  "  });",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/orders/user/yash@example.com",
+              "host": ["{{base_url}}"],
+              "path": ["api", "orders", "user", "yash@example.com"]
+            }
+          }
+        },
+        {
+          "name": "Get Orders by Email — No Results",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Returns empty array', () => {",
+                  "  pm.expect(pm.response.json()).to.be.an('array').that.is.empty;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/orders/user/nobody@example.com",
+              "host": ["{{base_url}}"],
+              "path": ["api", "orders", "user", "nobody@example.com"]
+            }
+          }
+        },
+        {
+          "name": "Update Order Status — SHIPPED",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Status updated to SHIPPED', () => {",
+                  "  pm.expect(pm.response.json().status).to.eql('SHIPPED');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"SHIPPED\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/orders/{{order_id}}/status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "orders", "{{order_id}}", "status"]
+            }
+          }
+        },
+        {
+          "name": "Cancel Order — Success",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Order is cancelled', () => {",
+                  "  pm.expect(pm.response.json().status).to.eql('CANCELLED');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/orders/{{cancel_order_id}}/cancel",
+              "host": ["{{base_url}}"],
+              "path": ["api", "orders", "{{cancel_order_id}}", "cancel"]
+            },
+            "description": "Cancel the multi-item order saved earlier."
+          }
+        },
+        {
+          "name": "Cancel Shipped Order — 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Cannot cancel shipped order', () => {",
+                  "  pm.expect(pm.response.json().detail).to.include('Cannot cancel');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/orders/{{order_id}}/cancel",
+              "host": ["{{base_url}}"],
+              "path": ["api", "orders", "{{order_id}}", "cancel"]
+            },
+            "description": "Try to cancel the order we updated to SHIPPED — should return 400."
+          }
+        }
+      ]
+    }
+  ]
+}

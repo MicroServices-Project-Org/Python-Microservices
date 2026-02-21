@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from pydantic import ConfigDict
 
 class Settings(BaseSettings):
     APP_NAME: str = "product-service"
@@ -7,7 +8,6 @@ class Settings(BaseSettings):
     MONGO_PORT: int = 27017
     DB_NAME: str = "product_db"
 
-    class Config:
-        env_file = ".env"
+    model_config = ConfigDict(env_file=".env")
 
 settings = Settings()
