@@ -1,0 +1,498 @@
+{
+  "info": {
+    "name": "Product Service",
+    "description": "Complete CRUD API collection for the Product Service microservice.\n\nBase URL: http://localhost:8001\n\nRun requests in order for a full verification flow:\n1. Health Check\n2. Create Product\n3. Get All Products\n4. Get Product by ID\n5. Update Product\n6. Search Products\n7. Delete Product",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8001",
+      "type": "string"
+    },
+    {
+      "key": "product_id",
+      "value": "",
+      "type": "string",
+      "description": "Auto-populated after Create Product request"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Service is UP', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.status).to.eql('UP');",
+                  "  pm.expect(json.service).to.eql('product-service');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            },
+            "description": "Verify the service is running and connected to MongoDB."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": \"UP\",\n  \"service\": \"product-service\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Products",
+      "item": [
+        {
+          "name": "Create Product",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', () => {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test('Product has ID', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.id).to.be.a('string');",
+                  "  pm.collectionVariables.set('product_id', json.id);",
+                  "  console.log('Product ID saved:', json.id);",
+                  "});",
+                  "pm.test('Product fields are correct', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.name).to.eql('iPhone 15 Pro');",
+                  "  pm.expect(json.price).to.eql(999.99);",
+                  "  pm.expect(json.category).to.eql('Electronics');",
+                  "  pm.expect(json.stock_quantity).to.eql(100);",
+                  "});",
+                  "pm.test('Timestamps are present', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.created_at).to.be.a('string');",
+                  "  pm.expect(json.updated_at).to.be.a('string');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"iPhone 15 Pro\",\n  \"description\": \"Latest Apple smartphone with A17 Pro chip\",\n  \"price\": 999.99,\n  \"category\": \"Electronics\",\n  \"tags\": [\"smartphone\", \"apple\", \"5g\"],\n  \"image_url\": \"https://example.com/iphone15pro.jpg\",\n  \"stock_quantity\": 100\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/products",
+              "host": ["{{base_url}}"],
+              "path": ["api", "products"]
+            },
+            "description": "Create a new product. The product ID is automatically saved to the `product_id` collection variable for use in subsequent requests."
+          },
+          "response": [
+            {
+              "name": "Created",
+              "status": "Created",
+              "code": 201,
+              "body": "{\n  \"id\": \"507f1f77bcf86cd799439011\",\n  \"name\": \"iPhone 15 Pro\",\n  \"description\": \"Latest Apple smartphone with A17 Pro chip\",\n  \"price\": 999.99,\n  \"category\": \"Electronics\",\n  \"tags\": [\"smartphone\", \"apple\", \"5g\"],\n  \"image_url\": \"https://example.com/iphone15pro.jpg\",\n  \"stock_quantity\": 100,\n  \"created_at\": \"2026-02-21T01:53:00.047882Z\",\n  \"updated_at\": \"2026-02-21T01:53:00.047882Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Create Product — Validation Error (negative price)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 422', () => {",
+                  "  pm.response.to.have.status(422);",
+                  "});",
+                  "pm.test('Validation error returned', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.detail).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Bad Product\",\n  \"description\": \"This has a negative price\",\n  \"price\": -50.00,\n  \"category\": \"Electronics\",\n  \"stock_quantity\": 10\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/products",
+              "host": ["{{base_url}}"],
+              "path": ["api", "products"]
+            },
+            "description": "Verify Pydantic validation rejects negative price with 422."
+          }
+        },
+        {
+          "name": "Get All Products",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Response has pagination fields', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.products).to.be.an('array');",
+                  "  pm.expect(json.total).to.be.a('number');",
+                  "  pm.expect(json.page).to.eql(1);",
+                  "  pm.expect(json.page_size).to.eql(10);",
+                  "});",
+                  "pm.test('At least one product exists', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.total).to.be.above(0);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/products?page=1&page_size=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "products"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "page_size", "value": "10" }
+              ]
+            },
+            "description": "Get paginated list of all products."
+          }
+        },
+        {
+          "name": "Get All Products — Page 2",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Page is 2', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.page).to.eql(2);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/products?page=2&page_size=5",
+              "host": ["{{base_url}}"],
+              "path": ["api", "products"],
+              "query": [
+                { "key": "page", "value": "2" },
+                { "key": "page_size", "value": "5" }
+              ]
+            },
+            "description": "Verify pagination works correctly."
+          }
+        },
+        {
+          "name": "Get Product by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Returns correct product', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.id).to.eql(pm.collectionVariables.get('product_id'));",
+                  "  pm.expect(json.name).to.be.a('string');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/products/{{product_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "products", "{{product_id}}"]
+            },
+            "description": "Get a single product by ID. Uses the product_id saved from Create Product."
+          }
+        },
+        {
+          "name": "Get Product by ID — Not Found",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 404', () => {",
+                  "  pm.response.to.have.status(404);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/products/507f1f77bcf86cd799439099",
+              "host": ["{{base_url}}"],
+              "path": ["api", "products", "507f1f77bcf86cd799439099"]
+            },
+            "description": "Verify 404 is returned for a non-existent product ID."
+          }
+        },
+        {
+          "name": "Get Product by ID — Invalid ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 400', () => {",
+                  "  pm.response.to.have.status(400);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/products/not-a-valid-id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "products", "not-a-valid-id"]
+            },
+            "description": "Verify 400 is returned for a malformed product ID."
+          }
+        },
+        {
+          "name": "Update Product",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Price is updated', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.price).to.eql(899.99);",
+                  "});",
+                  "pm.test('updated_at is newer than created_at', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(new Date(json.updated_at)).to.be.above(new Date(json.created_at));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"price\": 899.99,\n  \"stock_quantity\": 150\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/products/{{product_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "products", "{{product_id}}"]
+            },
+            "description": "Partially update a product. Only provided fields are updated."
+          }
+        },
+        {
+          "name": "Search Products",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Returns array of results', () => {",
+                  "  pm.expect(pm.response.json()).to.be.an('array');",
+                  "});",
+                  "pm.test('Results contain iPhone', () => {",
+                  "  const results = pm.response.json();",
+                  "  results.forEach(p => {",
+                  "    pm.expect(p.name.toLowerCase()).to.include('iphone');",
+                  "  });",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/products/search?q=iPhone",
+              "host": ["{{base_url}}"],
+              "path": ["api", "products", "search"],
+              "query": [
+                { "key": "q", "value": "iPhone" }
+              ]
+            },
+            "description": "Search products by name, category, or tags using regex."
+          }
+        },
+        {
+          "name": "Search Products — No Results",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Returns empty array for no match', () => {",
+                  "  pm.expect(pm.response.json()).to.be.an('array').that.is.empty;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/products/search?q=xyznonexistent",
+              "host": ["{{base_url}}"],
+              "path": ["api", "products", "search"],
+              "query": [
+                { "key": "q", "value": "xyznonexistent" }
+              ]
+            },
+            "description": "Verify search returns empty array when no products match."
+          }
+        },
+        {
+          "name": "Delete Product",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Success message returned', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.message).to.include('deleted successfully');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/products/{{product_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "products", "{{product_id}}"]
+            },
+            "description": "Delete a product by ID."
+          }
+        },
+        {
+          "name": "Delete Product — Verify Deleted",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 404 after deletion', () => {",
+                  "  pm.response.to.have.status(404);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/products/{{product_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "products", "{{product_id}}"]
+            },
+            "description": "Confirm the deleted product returns 404."
+          }
+        }
+      ]
+    }
+  ]
+}
