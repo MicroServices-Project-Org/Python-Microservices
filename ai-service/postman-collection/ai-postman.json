@@ -1,0 +1,367 @@
+{
+  "info": {
+    "name": "AI Service",
+    "description": "Test collection for AI Service — chatbot, recommendations, smart search, and Kafka notification personalization",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "ai_service_url",
+      "value": "http://localhost:8005"
+    },
+    {
+      "key": "product_service_url",
+      "value": "http://localhost:8001"
+    },
+    {
+      "key": "order_service_url",
+      "value": "http://localhost:8002"
+    },
+    {
+      "key": "inventory_service_url",
+      "value": "http://localhost:8003"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "item": [
+        {
+          "name": "AI Service Health",
+          "request": {
+            "method": "GET",
+            "url": "{{ai_service_url}}/health",
+            "description": "Verify the AI Service is running. Response includes the active LLM provider (gemini, groq, or ollama)."
+          }
+        },
+        {
+          "name": "Product Service Health",
+          "request": {
+            "method": "GET",
+            "url": "{{product_service_url}}/health",
+            "description": "Verify the Product Service is running. Required for AI features that fetch real catalog data."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Chatbot",
+      "description": "Shopping assistant chatbot powered by LLM. Fetches real product data from Product Service for context.",
+      "item": [
+        {
+          "name": "Chat — Simple Greeting",
+          "request": {
+            "method": "POST",
+            "url": "{{ai_service_url}}/api/ai/chat",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Hi\"\n}"
+            },
+            "description": "Simple greeting to test the chatbot is responding."
+          }
+        },
+        {
+          "name": "Chat — Product Question",
+          "request": {
+            "method": "POST",
+            "url": "{{ai_service_url}}/api/ai/chat",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"What products do you have under $500?\"\n}"
+            },
+            "description": "Tests that the chatbot references real products from the catalog."
+          }
+        },
+        {
+          "name": "Chat — Gift Suggestion",
+          "request": {
+            "method": "POST",
+            "url": "{{ai_service_url}}/api/ai/chat",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"I'm looking for a birthday gift for my friend who loves tech\"\n}"
+            },
+            "description": "Tests the chatbot's ability to make personalized suggestions from the catalog."
+          }
+        },
+        {
+          "name": "Chat — With Conversation History",
+          "request": {
+            "method": "POST",
+            "url": "{{ai_service_url}}/api/ai/chat",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"What about something cheaper?\",\n  \"history\": [\n    { \"role\": \"user\", \"content\": \"I'm looking for a smartphone\" },\n    { \"role\": \"assistant\", \"content\": \"We have the iPhone 15 Pro at $999.99. It's our top-rated smartphone.\" }\n  ]\n}"
+            },
+            "description": "Tests multi-turn conversation. The chatbot should understand context from history and suggest cheaper alternatives."
+          }
+        },
+        {
+          "name": "Chat — Compare Products",
+          "request": {
+            "method": "POST",
+            "url": "{{ai_service_url}}/api/ai/chat",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Can you compare the products you have in Electronics?\"\n}"
+            },
+            "description": "Tests product comparison from real catalog data."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Recommendations",
+      "description": "AI-powered product recommendations from real catalog. Returns JSON with product names and reasons.",
+      "item": [
+        {
+          "name": "Recommendations — By Product Name",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{ai_service_url}}/api/ai/recommendations?product_name=iPhone 15 Pro",
+              "host": ["{{ai_service_url}}"],
+              "path": ["api", "ai", "recommendations"],
+              "query": [
+                {
+                  "key": "product_name",
+                  "value": "iPhone 15 Pro"
+                }
+              ]
+            },
+            "description": "Get recommendations similar to or complementary to a specific product."
+          }
+        },
+        {
+          "name": "Recommendations — By Category",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{ai_service_url}}/api/ai/recommendations?category=Electronics",
+              "host": ["{{ai_service_url}}"],
+              "path": ["api", "ai", "recommendations"],
+              "query": [
+                {
+                  "key": "category",
+                  "value": "Electronics"
+                }
+              ]
+            },
+            "description": "Get recommendations for an entire category."
+          }
+        },
+        {
+          "name": "Recommendations — By Product + Category",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{ai_service_url}}/api/ai/recommendations?product_name=iPhone 15 Pro&category=Electronics",
+              "host": ["{{ai_service_url}}"],
+              "path": ["api", "ai", "recommendations"],
+              "query": [
+                {
+                  "key": "product_name",
+                  "value": "iPhone 15 Pro"
+                },
+                {
+                  "key": "category",
+                  "value": "Electronics"
+                }
+              ]
+            },
+            "description": "Get recommendations using both product name and category for more targeted results."
+          }
+        },
+        {
+          "name": "Recommendations — No Parameters",
+          "request": {
+            "method": "GET",
+            "url": "{{ai_service_url}}/api/ai/recommendations",
+            "description": "Get general recommendations without specifying a product or category."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Smart Search",
+      "description": "Natural language product search. Translates human queries into matching products from the catalog.",
+      "item": [
+        {
+          "name": "Suggest — Birthday Gift",
+          "request": {
+            "method": "POST",
+            "url": "{{ai_service_url}}/api/ai/suggest",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"something good for a birthday gift\"\n}"
+            },
+            "description": "Natural language search for gift ideas. Returns matching products with reasons."
+          }
+        },
+        {
+          "name": "Suggest — Budget Constraint",
+          "request": {
+            "method": "POST",
+            "url": "{{ai_service_url}}/api/ai/suggest",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"best smartphone under $1000\"\n}"
+            },
+            "description": "Tests budget-aware search. Should match products within price range."
+          }
+        },
+        {
+          "name": "Suggest — Vague Query",
+          "request": {
+            "method": "POST",
+            "url": "{{ai_service_url}}/api/ai/suggest",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"something cool and techy\"\n}"
+            },
+            "description": "Tests how the AI handles vague/subjective queries."
+          }
+        },
+        {
+          "name": "Suggest — No Match Expected",
+          "request": {
+            "method": "POST",
+            "url": "{{ai_service_url}}/api/ai/suggest",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"warm jacket for winter under $50\"\n}"
+            },
+            "description": "Tests behavior when no products match. Should return empty matches with suggested tags."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Kafka Flow — Notification Personalization",
+      "description": "End-to-end test: Place an order → AI Service personalizes email → Notification Service logs it. Requires Order, Inventory, AI, and Notification services all running.",
+      "item": [
+        {
+          "name": "1. Add Inventory (prerequisite)",
+          "request": {
+            "method": "POST",
+            "url": "{{inventory_service_url}}/api/inventory",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_id\": \"prod-ai-001\",\n  \"product_name\": \"MacBook Pro 16\",\n  \"quantity\": 50\n}"
+            },
+            "description": "Add inventory so the order can be confirmed."
+          }
+        },
+        {
+          "name": "2. Place Order (triggers full Kafka flow)",
+          "request": {
+            "method": "POST",
+            "url": "{{order_service_url}}/api/orders",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_name\": \"Yash Vyas\",\n  \"customer_email\": \"yash@example.com\",\n  \"items\": [\n    {\n      \"product_id\": \"prod-ai-001\",\n      \"product_name\": \"MacBook Pro 16\",\n      \"quantity\": 1,\n      \"unit_price\": 2499.99\n    }\n  ]\n}"
+            },
+            "description": "Places an order which triggers the full Kafka flow:\n\n1. Order Service → publishes 'order-placed' to Kafka\n2. AI Service → consumes event, generates personalized email via LLM\n3. AI Service → publishes 'ai-notification-ready' to Kafka\n4. Notification Service → consumes event, logs personalized email\n\nCheck all three service terminals for output:\n- Order Service: order confirmed\n- AI Service: 🤖 Personalizing... → ✅ Published ai-notification-ready\n- Notification Service: 📧 [EMAIL DISABLED] personalized email logged"
+          }
+        },
+        {
+          "name": "3. Place Order — Multiple Items",
+          "request": {
+            "method": "POST",
+            "url": "{{order_service_url}}/api/orders",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_name\": \"Yash Vyas\",\n  \"customer_email\": \"yash@example.com\",\n  \"items\": [\n    {\n      \"product_id\": \"prod-ai-001\",\n      \"product_name\": \"MacBook Pro 16\",\n      \"quantity\": 2,\n      \"unit_price\": 2499.99\n    }\n  ]\n}"
+            },
+            "description": "Tests personalization with multiple quantities. The AI-generated email should reference the quantity and total."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Swagger UI",
+      "item": [
+        {
+          "name": "Open Swagger UI",
+          "request": {
+            "method": "GET",
+            "url": "{{ai_service_url}}/docs",
+            "description": "Opens FastAPI's auto-generated Swagger UI. Use this to test all endpoints interactively in the browser."
+          }
+        }
+      ]
+    }
+  ]
+}

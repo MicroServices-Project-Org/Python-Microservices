@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+pydantic-settings
+httpx
+aiokafka
+
+# Testing
+pytest
+pytest-asyncio
