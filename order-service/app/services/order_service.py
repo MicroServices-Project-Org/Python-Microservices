@@ -53,7 +53,15 @@ async def _save_to_outbox(db: AsyncSession, topic: str, payload: dict):
 async def create_order(data: OrderCreate, db: AsyncSession) -> Order:
     # Step 1 — Check stock for all items
     for item in data.items:
-        in_stock = await inventory_client.check_stock(item.product_id, item.quantity)
+        try:
+            in_stock = await inventory_client.check_stock(item.product_id, item.quantity)
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Inventory service unavailable after retries",
+            )
         if not in_stock:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
