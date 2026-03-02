@@ -18,12 +18,17 @@ class Settings(BaseSettings):
     SMTP_HOST: str = "smtp.gmail.com"
     SMTP_PORT: int = 587
     SMTP_USERNAME: str = ""
-    SMTP_PASSWORD: str = ""  # Gmail App Password (not your login password)
+    SMTP_PASSWORD: str = ""
     SMTP_FROM_EMAIL: str = ""
     SMTP_FROM_NAME: str = "FastAPI Store"
 
-    # Feature flag — disable emails during development
+    # Feature flags
     EMAIL_ENABLED: bool = False
+
+    # Redis — idempotency
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379
+    REDIS_IDEMPOTENCY_TTL: int = 604800  # 7 days in seconds
 
     model_config = ConfigDict(env_file=".env")
 

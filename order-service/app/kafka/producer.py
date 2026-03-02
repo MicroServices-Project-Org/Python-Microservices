@@ -5,6 +5,7 @@ from app.config import settings
 # Global producer instance
 _producer: AIOKafkaProducer = None
 
+
 async def start_producer():
     global _producer
     _producer = AIOKafkaProducer(
@@ -14,23 +15,21 @@ async def start_producer():
     await _producer.start()
     print("✅ Kafka producer started")
 
+
 async def stop_producer():
     global _producer
     if _producer:
         await _producer.stop()
         print("🔌 Kafka producer stopped")
 
-async def publish_order_placed(order_data: dict):
-    """Publish order-placed event to Kafka."""
+
+async def publish_event(topic: str, payload: dict):
+    """
+    Publish an event to a Kafka topic.
+    Used by the outbox worker to deliver events.
+    Raises exception on failure so the outbox worker can retry.
+    """
     if not _producer:
-        print("⚠️  Kafka producer not started — skipping event publish")
-        return
-    try:
-        await _producer.send_and_wait(
-            settings.KAFKA_ORDER_TOPIC,
-            value=order_data
-        )
-        print(f"📨 Published order-placed event: {order_data['order_number']}")
-    except Exception as e:
-        # Log but don't fail the order — Kafka is non-critical path
-        print(f"❌ Failed to publish Kafka event: {e}")
+        raise RuntimeError("Kafka producer not started")
+
+    await _producer.send_and_wait(topic, value=payload)

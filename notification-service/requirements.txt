@@ -1,4 +1,9 @@
 fastapi
 uvicorn[standard]
 pydantic-settings
+redis
 aiokafka
+
+# Testing
+pytest
+pytest-asyncio
