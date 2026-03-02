@@ -1,6 +1,7 @@
 from pydantic_settings import BaseSettings
 from pydantic import ConfigDict
 
+
 class Settings(BaseSettings):
     APP_NAME: str = "order-service"
     APP_PORT: int = 8002
@@ -18,6 +19,11 @@ class Settings(BaseSettings):
     # Kafka
     KAFKA_BOOTSTRAP_SERVERS: str = "localhost:9092"
     KAFKA_ORDER_TOPIC: str = "order-placed"
+    KAFKA_ORDER_CANCELLED_TOPIC: str = "order-cancelled"
+
+    # Outbox Worker
+    OUTBOX_POLL_INTERVAL_SECONDS: int = 5
+    OUTBOX_RETENTION_DAYS: int = 7
 
     @property
     def DATABASE_URL(self) -> str:
@@ -27,5 +33,6 @@ class Settings(BaseSettings):
         )
 
     model_config = ConfigDict(env_file=".env")
+
 
 settings = Settings()

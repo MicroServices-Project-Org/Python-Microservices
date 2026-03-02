@@ -1,3 +1,4 @@
+import json
 import uuid
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -5,13 +6,49 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException, status
 from app.models.order import Order, OrderItem, OrderStatus
+from app.models.outbox import Outbox
 from app.schemas.order import OrderCreate, OrderStatusUpdate
 from app.clients import inventory_client
-from app.kafka.producer import publish_order_placed
+from app.config import settings
+
 
 def _generate_order_number() -> str:
     now = datetime.now(timezone.utc)
     return f"ORD-{now.strftime('%Y%m%d')}-{str(uuid.uuid4())[:8].upper()}"
+
+
+def _build_order_event(order: Order, event_type: str) -> dict:
+    """Build the Kafka event payload for an order."""
+    return {
+        "event_type": event_type,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "order_number": order.order_number,
+        "customer_name": order.customer_name,
+        "customer_email": order.customer_email,
+        "total_amount": order.total_amount,
+        "items": [
+            {
+                "product_id": i.product_id,
+                "product_name": i.product_name,
+                "quantity": i.quantity,
+                "price": i.unit_price,
+            }
+            for i in order.items
+        ],
+    }
+
+
+async def _save_to_outbox(db: AsyncSession, topic: str, payload: dict):
+    """
+    Save an event to the outbox table within the current transaction.
+    The outbox worker will pick it up and publish to Kafka.
+    """
+    outbox_event = Outbox(
+        topic=topic,
+        event_payload=json.dumps(payload),
+    )
+    db.add(outbox_event)
+
 
 async def create_order(data: OrderCreate, db: AsyncSession) -> Order:
     # Step 1 — Check stock for all items
@@ -20,7 +57,7 @@ async def create_order(data: OrderCreate, db: AsyncSession) -> Order:
         if not in_stock:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Insufficient stock for product: {item.product_name}"
+                detail=f"Insufficient stock for product: {item.product_name}",
             )
 
     # Step 2 — Calculate total
@@ -56,25 +93,14 @@ async def create_order(data: OrderCreate, db: AsyncSession) -> Order:
     for item in data.items:
         await inventory_client.reduce_stock(item.product_id, item.quantity)
 
-    # Step 6 — Publish Kafka event (non-blocking)
-    await publish_order_placed({
-        "event_type": "ORDER_PLACED",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "order_number": order.order_number,
-        "customer_name": order.customer_name,
-        "customer_email": order.customer_email,
-        "total_amount": order.total_amount,
-        "items": [
-            {
-                "product_id": i.product_id,
-                "product_name": i.product_name,
-                "quantity": i.quantity,
-                "price": i.unit_price
-            } for i in order.items
-        ]
-    })
+    # Step 6 — Save event to outbox (SAME TRANSACTION as order)
+    # The outbox worker will publish to Kafka — guaranteed delivery
+    event = _build_order_event(order, "ORDER_PLACED")
+    await _save_to_outbox(db, settings.KAFKA_ORDER_TOPIC, event)
+    print(f"📥 Order event saved to outbox: {order.order_number}")
 
     return order
+
 
 async def get_order(order_id: str, db: AsyncSession) -> Order:
     try:
@@ -83,14 +109,13 @@ async def get_order(order_id: str, db: AsyncSession) -> Order:
         raise HTTPException(status_code=400, detail="Invalid order ID")
 
     result = await db.execute(
-        select(Order)
-        .options(selectinload(Order.items))
-        .where(Order.id == oid)
+        select(Order).options(selectinload(Order.items)).where(Order.id == oid)
     )
     order = result.scalar_one_or_none()
     if not order:
         raise HTTPException(status_code=404, detail=f"Order {order_id} not found")
     return order
+
 
 async def get_orders_by_email(email: str, db: AsyncSession) -> list[Order]:
     result = await db.execute(
@@ -101,6 +126,7 @@ async def get_orders_by_email(email: str, db: AsyncSession) -> list[Order]:
     )
     return list(result.scalars().all())
 
+
 async def get_all_orders(db: AsyncSession) -> list[Order]:
     result = await db.execute(
         select(Order)
@@ -109,21 +135,31 @@ async def get_all_orders(db: AsyncSession) -> list[Order]:
     )
     return list(result.scalars().all())
 
-async def update_order_status(order_id: str, data: OrderStatusUpdate, db: AsyncSession) -> Order:
+
+async def update_order_status(
+    order_id: str, data: OrderStatusUpdate, db: AsyncSession
+) -> Order:
     order = await get_order(order_id, db)
     order.status = data.status
     await db.flush()
     await db.refresh(order, ["items"])
     return order
 
+
 async def cancel_order(order_id: str, db: AsyncSession) -> Order:
     order = await get_order(order_id, db)
     if order.status in [OrderStatus.SHIPPED, OrderStatus.DELIVERED]:
         raise HTTPException(
             status_code=400,
-            detail=f"Cannot cancel order with status {order.status}"
+            detail=f"Cannot cancel order with status {order.status}",
         )
     order.status = OrderStatus.CANCELLED
     await db.flush()
     await db.refresh(order, ["items"])
+
+    # Save cancellation event to outbox
+    event = _build_order_event(order, "ORDER_CANCELLED")
+    await _save_to_outbox(db, settings.KAFKA_ORDER_CANCELLED_TOPIC, event)
+    print(f"📥 Cancel event saved to outbox: {order.order_number}")
+
     return order

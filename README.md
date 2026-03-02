@@ -1,6 +1,8 @@
-# 🏗️ FastAPI Microservices — E-Commerce Platform with AI
+# 🏗️ Polyglot Microservices — E-Commerce Platform with AI
 
-A production-grade microservices architecture built with **FastAPI**, **Kafka**, **PostgreSQL**, **MongoDB**, and **Groq/Llama 3.3** — designed to demonstrate real-world patterns including event-driven communication, inter-service REST calls, JWT authentication, rate limiting, resilience patterns, and AI integration.
+A production-grade microservices architecture built with **FastAPI**, **Spring Boot**, **Kafka**, **PostgreSQL**, **MongoDB**, **Elasticsearch**, **Redis**, and **Groq/Llama 3.3** — designed to demonstrate real-world patterns including event-driven communication, inter-service REST calls, JWT authentication, rate limiting, resilience patterns, full-text search, and AI integration.
+
+**Polyglot architecture:** Python services for core e-commerce + AI, Java service for search — demonstrating that microservices allow each service to use the best language for the job.
 
 ---
 
@@ -16,35 +18,40 @@ A production-grade microservices architecture built with **FastAPI**, **Kafka**,
                         │   API Gateway   │  ← Rate limiting, JWT validation
                         │   (FastAPI)     │
                         │   Port: 9000    │
-                        └──┬──┬──┬──┬────┘
-                           │  │  │  │
-          ┌────────────────┘  │  │  └─────────────────┐
-          │             ┌─────┘  └─────┐               │
-          ▼             ▼              ▼                ▼
-  ┌──────────────┐ ┌──────────┐ ┌──────────────┐ ┌──────────┐
-  │   Product    │ │  Order   │ │  Inventory   │ │    AI    │
-  │   Service    │ │  Service │ │   Service    │ │  Service │
-  │  Port: 8001  │ │Port: 8002│ │  Port: 8003  │ │Port: 8005│
-  └──────┬───────┘ └────┬─────┘ └──────┬───────┘ └────┬─────┘
-         │              │              │               │
-    MongoDB         PostgreSQL    PostgreSQL     Groq / Llama 3.3
-                         │
-                    ┌────▼─────────────────────┐
-                    │         KAFKA            │
-                    │   Topic: order-placed    │
-                    └────┬─────────────────────┘
-                         │
-              ┌──────────┴───────────┐
-              ▼                      ▼
-     ┌─────────────────┐    ┌─────────────────┐
-     │  Notification   │    │   AI Service    │
-     │    Service      │    │  (Kafka Consumer│
-     │   Port: 8004    │    │  + personalizes │
-     └─────────────────┘    │   the email)    │
-              ▲             └────────┬────────┘
-              └──────────────────────┘
-               AI sends personalized
-               content to Notification
+                        └──┬──┬──┬──┬──┬─┘
+                           │  │  │  │  │
+       ┌───────────────────┘  │  │  │  └──────────────────┐
+       │             ┌────────┘  │  └────────┐             │
+       ▼             ▼           ▼           ▼             ▼
+┌────────────┐ ┌──────────┐ ┌──────────┐ ┌────────┐ ┌───────────┐
+│  Product   │ │  Order   │ │Inventory │ │   AI   │ │  Search   │
+│  Service   │ │  Service │ │ Service  │ │Service │ │  Service  │
+│ Python     │ │ Python   │ │ Python   │ │Python  │ │  Java     │
+│ Port: 8001 │ │Port: 8002│ │Port: 8003│ │Pt: 8005│ │ Port: 8006│
+└─────┬──────┘ └────┬─────┘ └────┬─────┘ └───┬────┘ └─────┬─────┘
+      │              │            │            │            │
+   MongoDB      PostgreSQL   PostgreSQL   Groq/Llama  Elasticsearch
+                     │
+                ┌────▼──────────────────────┐
+                │          KAFKA            │
+                │  order-placed             │
+                │  order-cancelled          │
+                │  product-updated          │
+                └────┬──────────┬───────────┘
+                     │          │
+          ┌──────────┤          ├───────────┐
+          ▼          ▼          ▼           ▼
+  ┌─────────────┐ ┌────────┐ ┌───────────┐
+  │Notification │ │   AI   │ │  Search   │
+  │  Service    │ │Service │ │  Service  │
+  │ Port: 8004  │ │(Kafka  │ │(reindexes │
+  │             │ │Consumer│ │on product │
+  │  Redis      │ │+ LLM)  │ │ changes)  │
+  └─────────────┘ └───┬────┘ └───────────┘
+          ▲            │
+          └────────────┘
+          AI sends personalized
+          content to Notification
 
   ┌─────────────────────────────────────────────────┐
   │              Keycloak (Port: 8081)              │
@@ -61,14 +68,15 @@ A production-grade microservices architecture built with **FastAPI**, **Kafka**,
 
 ## 🧩 Services Overview
 
-| Service | Responsibility | Database | Port | Status |
-|---|---|---|---|---|
-| **API Gateway** | Routing, JWT auth, rate limiting | None | 9000 | ✅ Complete |
-| **Product Service** | CRUD for product catalog | MongoDB | 8001 | ✅ Complete |
-| **Order Service** | Place & manage orders, Kafka producer | PostgreSQL | 8002 | ✅ Complete |
-| **Inventory Service** | Stock management, stock verification | PostgreSQL | 8003 | ✅ Complete |
-| **Notification Service** | Email notifications via Kafka events | None (stateless) | 8004 | ✅ Complete |
-| **AI Service** | Recommendations, chatbot, smart search | None (stateless) | 8005 | ✅ Complete |
+| Service | Responsibility | Database | Port | Language | Status |
+|---|---|---|---|---|---|
+| **API Gateway** | Routing, JWT auth, rate limiting | None | 9000 | Python | ✅ Complete |
+| **Product Service** | CRUD for product catalog | MongoDB | 8001 | Python | ✅ Complete |
+| **Order Service** | Place & manage orders, Kafka producer | PostgreSQL + Outbox | 8002 | Python | ✅ Complete |
+| **Inventory Service** | Stock management, stock verification | PostgreSQL | 8003 | Python | ✅ Complete |
+| **Notification Service** | Email notifications via Kafka events | Redis (idempotency) | 8004 | Python | ✅ Complete |
+| **AI Service** | Recommendations, chatbot, smart search | None (stateless) | 8005 | Python | ✅ Complete |
+| **Search Service** | Full-text search, autocomplete, filters | Elasticsearch | 8006 | Java | 🔲 Planned |
 
 ---
 
@@ -76,20 +84,23 @@ A production-grade microservices architecture built with **FastAPI**, **Kafka**,
 
 | Category | Technology |
 |---|---|
-| **Framework** | FastAPI (async-native) |
-| **Language** | Python 3.12 |
+| **Python Framework** | FastAPI (async-native) |
+| **Java Framework** | Spring Boot 3.3 + Java 21 |
+| **Language** | Python 3.12, Java 21 |
 | **Databases** | PostgreSQL 16, MongoDB 7.0 |
+| **Search Engine** | Elasticsearch 8.13 |
+| **Cache / Idempotency** | Redis 7.2 |
 | **Message Broker** | Apache Kafka (Confluent 7.6.0) |
-| **ORM** | SQLAlchemy (async) for PostgreSQL, Motor (async) for MongoDB |
-| **Validation** | Pydantic v2 |
-| **HTTP Client** | httpx (async) |
+| **ORM** | SQLAlchemy (async) for PostgreSQL, Motor (async) for MongoDB, Spring Data JPA, Spring Data Elasticsearch |
+| **Validation** | Pydantic v2, Jakarta Bean Validation |
+| **HTTP Client** | httpx (async), WebClient (Spring WebFlux) |
 | **AI/LLM** | Groq (Llama 3.3 70B) — provider-agnostic, supports Gemini & Ollama |
 | **Authentication** | Keycloak 24.0 (OAuth2 / JWT) + PyJWT |
 | **Rate Limiting** | slowapi |
 | **Resilience** | tenacity (retry), pybreaker (circuit breaker) |
 | **Observability** | Prometheus, Grafana, Loki, Tempo |
 | **Containerization** | Docker, Docker Compose |
-| **Testing** | pytest, pytest-asyncio, unittest.mock |
+| **Testing** | pytest, pytest-asyncio, unittest.mock, JUnit 5, Mockito |
 
 ---
 
@@ -98,26 +109,23 @@ A production-grade microservices architecture built with **FastAPI**, **Kafka**,
 ```
 Python-Microservices/
 │
-├── api-gateway/
+├── api-gateway/                          # Python — FastAPI
 │   ├── app/
-│   │   ├── main.py                  # Proxy routes, shared httpx client
-│   │   ├── config.py                # Service URLs, Keycloak, rate limits
+│   │   ├── main.py                       # Proxy routes, shared httpx client
+│   │   ├── config.py                     # Service URLs, Keycloak, rate limits
 │   │   ├── auth/
-│   │   │   └── keycloak.py          # JWT validation via JWKS
+│   │   │   └── keycloak.py               # JWT validation via JWKS
 │   │   └── middleware/
-│   │       └── rate_limit.py        # slowapi rate limiter
+│   │       └── rate_limit.py             # slowapi rate limiter
 │   ├── tests/
-│   │   └── unit/
-│   │       ├── test_gateway.py
-│   │       └── test_auth.py
 │   ├── Dockerfile
 │   └── requirements.txt
 │
-├── product-service/
+├── product-service/                      # Python — FastAPI + MongoDB
 │   ├── app/
 │   │   ├── main.py
 │   │   ├── config.py
-│   │   ├── database.py              # Motor async MongoDB client
+│   │   ├── database.py                   # Motor async MongoDB client
 │   │   ├── schemas/
 │   │   │   └── product.py
 │   │   ├── routes/
@@ -128,32 +136,34 @@ Python-Microservices/
 │   ├── Dockerfile
 │   └── requirements.txt
 │
-├── order-service/
+├── order-service/                        # Python — FastAPI + PostgreSQL + Kafka
 │   ├── app/
 │   │   ├── main.py
 │   │   ├── config.py
-│   │   ├── database.py              # SQLAlchemy async + PostgreSQL
+│   │   ├── database.py                   # SQLAlchemy async + PostgreSQL
 │   │   ├── models/
-│   │   │   └── order.py             # Orders + order_items ORM
+│   │   │   ├── order.py                  # Orders + order_items ORM
+│   │   │   └── outbox.py                 # Outbox table for guaranteed delivery
 │   │   ├── schemas/
 │   │   │   └── order.py
 │   │   ├── routes/
 │   │   │   └── order_routes.py
 │   │   ├── services/
-│   │   │   └── order_service.py
+│   │   │   ├── order_service.py
+│   │   │   └── outbox_worker.py          # Background worker: outbox → Kafka
 │   │   ├── clients/
-│   │   │   └── inventory_client.py  # httpx client for Inventory Service
+│   │   │   └── inventory_client.py
 │   │   └── kafka/
-│   │       └── producer.py          # aiokafka producer
+│   │       └── producer.py
 │   ├── tests/
 │   ├── Dockerfile
 │   └── requirements.txt
 │
-├── inventory-service/
+├── inventory-service/                    # Python — FastAPI + PostgreSQL
 │   ├── app/
 │   │   ├── main.py
 │   │   ├── config.py
-│   │   ├── database.py              # SQLAlchemy async + PostgreSQL
+│   │   ├── database.py
 │   │   ├── models/
 │   │   │   └── inventory.py
 │   │   ├── schemas/
@@ -166,43 +176,57 @@ Python-Microservices/
 │   ├── Dockerfile
 │   └── requirements.txt
 │
-├── notification-service/
+├── notification-service/                 # Python — FastAPI + Kafka + Redis
 │   ├── app/
-│   │   ├── main.py                  # FastAPI + Kafka consumer background task
+│   │   ├── main.py                       # FastAPI + Kafka consumer background task
 │   │   ├── config.py
 │   │   ├── kafka/
-│   │   │   └── consumer.py          # aiokafka consumer for 4 topics
+│   │   │   └── consumer.py               # aiokafka consumer for 4 topics
 │   │   └── services/
-│   │       └── email_service.py     # Gmail SMTP + HTML email templates
+│   │       └── email_service.py          # Gmail SMTP + HTML email templates
 │   ├── tests/
 │   ├── Dockerfile
 │   └── requirements.txt
 │
-├── ai-service/
+├── ai-service/                           # Python — FastAPI + Kafka + LLM
 │   ├── app/
-│   │   ├── main.py                  # FastAPI + Kafka consumer background task
+│   │   ├── main.py
 │   │   ├── config.py
 │   │   ├── llm/
-│   │   │   ├── base.py              # Abstract LLMClient interface
-│   │   │   ├── gemini_client.py     # Google Gemini
-│   │   │   ├── groq_client.py       # Groq / Llama 3.3 70B
-│   │   │   ├── ollama_client.py     # Ollama (local)
-│   │   │   └── factory.py           # Provider factory
+│   │   │   ├── base.py                   # Abstract LLMClient interface
+│   │   │   ├── gemini_client.py          # Google Gemini
+│   │   │   ├── groq_client.py            # Groq / Llama 3.3 70B
+│   │   │   ├── ollama_client.py          # Ollama (local)
+│   │   │   └── factory.py               # Provider factory
 │   │   ├── clients/
-│   │   │   └── product_client.py    # Fetches real catalog for LLM context
+│   │   │   └── product_client.py         # Fetches real catalog for LLM context
 │   │   ├── routes/
-│   │   │   └── ai_routes.py         # Chat, recommendations, suggest
+│   │   │   └── ai_routes.py
 │   │   ├── services/
 │   │   │   ├── chatbot.py
 │   │   │   ├── recommendation.py
 │   │   │   ├── suggestion.py
 │   │   │   └── notification_ai.py
 │   │   └── kafka/
-│   │       ├── consumer.py          # Consumes order-placed
-│   │       └── producer.py          # Publishes ai-notification-ready
+│   │       ├── consumer.py
+│   │       └── producer.py
 │   ├── tests/
 │   ├── Dockerfile
 │   └── requirements.txt
+│
+├── search-service/                       # Java — Spring Boot + Elasticsearch
+│   ├── src/main/java/
+│   │   └── com/ecommerce/search/
+│   │       ├── SearchApplication.java
+│   │       ├── config/
+│   │       ├── controller/
+│   │       ├── model/
+│   │       ├── repository/
+│   │       ├── service/
+│   │       └── kafka/
+│   ├── src/test/java/
+│   ├── Dockerfile
+│   └── pom.xml
 │
 ├── docker/
 │   ├── postgres/
@@ -242,6 +266,24 @@ Order Service ──► [order-placed]          ──► AI Service (personaliz
 AI Service    ──► [ai-notification-ready] ──► Notification Service (personalized email)
 Order Service ──► [order-cancelled]       ──► Notification Service (cancellation email)
 Inventory Svc ──► [inventory-low]         ──► Notification Service (low stock alert)
+Product Svc   ──► [product-updated]       ──► Search Service (reindex in Elasticsearch)
+```
+
+### Asynchronous (Kafka + Outbox Pattern)
+```
+Order Service:
+  BEGIN TRANSACTION
+    1. Save order to PostgreSQL
+    2. Save event to outbox table (same transaction)
+  COMMIT
+
+  Background worker:
+    3. Read PENDING events from outbox
+    4. Publish to Kafka
+    5. Mark as SENT
+    6. Cleanup after 7 days
+
+  → Guaranteed delivery — events survive Kafka outages
 ```
 
 ### Kafka Topics
@@ -252,6 +294,7 @@ Inventory Svc ──► [inventory-low]         ──► Notification Service (
 | `order-cancelled` | Order Service | Notification Service | Order cancelled |
 | `inventory-low` | Inventory Service | Notification Service | Stock alert |
 | `ai-notification-ready` | AI Service | Notification Service | Personalized email ready |
+| `product-updated` | Product Service | Search Service | Reindex product in Elasticsearch |
 
 ---
 
@@ -285,6 +328,10 @@ Table: orders
 Table: order_items
   id (UUID, PK) | order_id (FK) | product_id | product_name
   quantity       | unit_price    | total_price
+
+Table: outbox
+  id (UUID, PK) | topic | event_payload (JSON) | status (PENDING/SENT)
+  created_at     | sent_at
 ```
 
 ### Inventory Service — PostgreSQL
@@ -294,6 +341,21 @@ Table: inventory
   quantity        | reserved_qty        | created_at | updated_at
 
   Computed: available_qty = quantity - reserved_qty
+```
+
+### Search Service — Elasticsearch
+```json
+Index: products
+{
+  "name": "iPhone 15 Pro",
+  "description": "Latest Apple smartphone",
+  "price": 999.99,
+  "category": "Electronics",
+  "tags": ["smartphone", "apple", "5g"],
+  "suggest": {
+    "input": ["iPhone", "iPhone 15", "iPhone 15 Pro"]
+  }
+}
 ```
 
 ---
@@ -309,6 +371,7 @@ Table: inventory
 | `*` | `/api/orders/**` | Order Service :8002 | 60/min |
 | `*` | `/api/inventory/**` | Inventory Service :8003 | 60/min |
 | `*` | `/api/ai/**` | AI Service :8005 | 15/min |
+| `*` | `/api/search/**` | Search Service :8006 | 60/min |
 
 ### Product Service
 | Method | Endpoint | Description |
@@ -347,6 +410,13 @@ Table: inventory
 | `GET` | `/api/ai/recommendations` | Product recommendations |
 | `POST` | `/api/ai/suggest` | Natural language product search |
 
+### Search Service (Java)
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/search?q=` | Full-text product search |
+| `GET` | `/api/search/autocomplete?q=` | Autocomplete suggestions |
+| `GET` | `/api/search/filter?category=&minPrice=&maxPrice=` | Faceted filtering |
+
 ### Notification Service
 | Method | Endpoint | Description |
 |---|---|---|
@@ -357,17 +427,20 @@ Table: inventory
 ## 🔄 End-to-End Order Flow
 
 ```
-1. Client → POST :9000/api/orders (via API Gateway)
-2. Gateway validates JWT → proxies to Order Service
-3. Order Service → GET /api/inventory/{id}/check (verify stock)
-4. If in stock → save order to PostgreSQL
-5. Order Service → PATCH /api/inventory/{id}/reduce (reduce stock)
-6. Order Service → publish 'order-placed' to Kafka
-7. Notification Service → consumes event → logs/sends confirmation email
-8. AI Service → consumes event → generates personalized email via LLM
-9. AI Service → publishes 'ai-notification-ready' to Kafka
-10. Notification Service → consumes AI event → logs/sends personalized email
-11. Return 201 Created to client
+1.  Client → POST :9000/api/orders (via API Gateway)
+2.  Gateway validates JWT → proxies to Order Service
+3.  Order Service → GET /api/inventory/{id}/check (verify stock)
+4.  If in stock → save order to PostgreSQL
+5.  Save event to outbox table (same transaction — guaranteed)
+6.  Order Service → PATCH /api/inventory/{id}/reduce (reduce stock)
+7.  Background worker reads outbox → publishes 'order-placed' to Kafka
+8.  Worker marks event as SENT in outbox
+9.  Notification Service → consumes event → checks Redis (idempotency)
+10. If new → logs/sends confirmation email
+11. AI Service → consumes event → generates personalized email via LLM
+12. AI Service → publishes 'ai-notification-ready' to Kafka
+13. Notification Service → consumes AI event → checks Redis → logs/sends personalized email
+14. Return 201 Created to client
 ```
 
 ---
@@ -391,6 +464,23 @@ LLM_PROVIDER=ollama    # Ollama (local, no API key)
 
 ---
 
+## 🔍 Search Features (Java Spring Boot)
+
+| Feature | Endpoint | Description |
+|---|---|---|
+| Full-text search | `GET /api/search?q=` | Fuzzy matching, relevance scoring |
+| Autocomplete | `GET /api/search/autocomplete?q=` | Type-ahead suggestions |
+| Faceted filters | `GET /api/search/filter?category=&minPrice=&maxPrice=` | Filter by category, price range |
+
+### How Search Stays in Sync
+```
+Product Service (Python) → Kafka: product-updated → Search Service (Java) → Elasticsearch reindex
+```
+
+Products are the source of truth in MongoDB. Elasticsearch is a read-optimized copy that stays in sync via Kafka events. If Elasticsearch goes down, the Product Service still works — search is just temporarily unavailable.
+
+---
+
 ## 🔐 Security
 
 ```
@@ -407,26 +497,43 @@ LLM_PROVIDER=ollama    # Ollama (local, no API key)
 
 ---
 
+## 🛡️ Resilience Patterns
+
+| Pattern | Library | Applied At | Fallback |
+|---|---|---|---|
+| **Outbox Pattern** | PostgreSQL | Order Service → Kafka | Events survive Kafka outages |
+| **Idempotency** | Redis `SET NX` | Notification Service | Prevents duplicate emails |
+| **Circuit Breaker** | pybreaker | Order → Inventory | Return "service unavailable" |
+| **Retry + Backoff** | tenacity | Order → Inventory, AI → LLM | Raise after max retries |
+| **Timeout** | httpx | All inter-service calls | Raise timeout exception |
+| **Rate Limiter** | slowapi | API Gateway | 429 Too Many Requests |
+
+---
+
 ## 🧪 Testing
 
-Each service has unit tests using `pytest` with `unittest.mock` for mocking external dependencies.
-
-| Service | Test Files | Tests | What's Covered |
-|---|---|---|---|
-| API Gateway | `test_gateway.py`, `test_auth.py` | 30 | Routing, proxying, error handling, JWT validation |
-| Product Service | `test_product_service.py` | — | CRUD operations, search, validation |
-| Order Service | `test_order_service.py` | 15 | Order creation, stock checks, cancellation, Kafka |
-| Inventory Service | `test_inventory_service.py` | 20 | CRUD, stock check, reduce, restock, edge cases |
-| Notification Service | `test_email_service.py`, `test_kafka_consumer.py` | 34 | Email templates, SMTP, Kafka routing, all 4 handlers |
-| AI Service | `test_llm_clients.py`, `test_ai_services.py`, `test_product_client.py`, `test_kafka.py` | 44 | All 3 LLM providers, all 4 AI features, product client, Kafka |
+| Service | Language | Test Files | Tests | What's Covered |
+|---|---|---|---|---|
+| API Gateway | Python | `test_gateway.py`, `test_auth.py` | 30 | Routing, proxying, error handling, JWT |
+| Product Service | Python | `test_product_service.py` | — | CRUD, search, validation |
+| Order Service | Python | `test_order_service.py` | 15 | Order creation, stock checks, cancellation, Kafka |
+| Inventory Service | Python | `test_inventory_service.py` | 20 | CRUD, stock check, reduce, restock |
+| Notification Service | Python | `test_email_service.py`, `test_kafka_consumer.py` | 34 | Email templates, SMTP, Kafka routing |
+| AI Service | Python | `test_llm_clients.py`, `test_ai_services.py`, `test_product_client.py`, `test_kafka.py` | 44 | All 3 LLM providers, all 4 AI features |
+| Search Service | Java | JUnit 5 + Mockito | 🔲 | Planned |
 
 **Total: 143+ unit tests across all services**
 
 ### Running Tests
 ```bash
+# Python services
 cd <service-directory>
 source venv/bin/activate
 pytest -v
+
+# Java service
+cd search-service
+./mvnw test
 ```
 
 ---
@@ -437,6 +544,8 @@ pytest -v
 |---|---|---|
 | MongoDB | 27017 | Product Service database |
 | PostgreSQL | 5433 | Order + Inventory databases |
+| Elasticsearch | 9200 | Search Service — full-text search |
+| Redis | 6379 | Notification Service — idempotency + caching |
 | Kafka | 9092 | Event streaming |
 | Zookeeper | 2181 | Kafka coordination |
 | Kafka UI | 8090 | Visual Kafka management |
@@ -464,6 +573,7 @@ docker ps --format "table {{.Names}}\t{{.Status}}"
 ### Prerequisites
 - macOS with Homebrew
 - Python 3.12 (via Homebrew, **not** Anaconda)
+- Java 21 (for Search Service)
 - Docker Desktop
 - Groq API key (free at https://console.groq.com/keys)
 
@@ -476,27 +586,31 @@ docker-compose up -d
 ### Step 2 — Start Services (each in a separate terminal)
 
 ```bash
-# Terminal 1: Product Service
+# Terminal 1: Product Service (Python)
 cd product-service && source venv/bin/activate
 python -m uvicorn app.main:app --port 8001 --loop asyncio
 
-# Terminal 2: Inventory Service
+# Terminal 2: Inventory Service (Python)
 cd inventory-service && source venv/bin/activate
 python -m uvicorn app.main:app --port 8003 --loop asyncio
 
-# Terminal 3: Order Service
+# Terminal 3: Order Service (Python)
 cd order-service && source venv/bin/activate
 python -m uvicorn app.main:app --port 8002 --loop asyncio
 
-# Terminal 4: Notification Service
+# Terminal 4: Notification Service (Python)
 cd notification-service && source venv/bin/activate
 python -m uvicorn app.main:app --port 8004 --loop asyncio
 
-# Terminal 5: AI Service
+# Terminal 5: AI Service (Python)
 cd ai-service && source venv/bin/activate
 python -m uvicorn app.main:app --port 8005 --loop asyncio
 
-# Terminal 6: API Gateway
+# Terminal 6: Search Service (Java)
+cd search-service
+./mvnw spring-boot:run
+
+# Terminal 7: API Gateway (Python)
 cd api-gateway && source venv/bin/activate
 python -m uvicorn app.main:app --port 9000 --loop asyncio
 ```
@@ -529,20 +643,27 @@ curl -X POST http://localhost:9000/api/orders \
 curl -X POST http://localhost:9000/api/ai/chat \
   -H "Content-Type: application/json" \
   -d '{"message": "What products do you have?"}'
+
+# Full-text search (Java service)
+curl "http://localhost:9000/api/search?q=iphone"
+
+# Autocomplete
+curl "http://localhost:9000/api/search/autocomplete?q=iph"
 ```
 
 ---
 
 ## 📝 Service Documentation
 
-| Service | Documentation |
-|---|---|
-| Product Service | [`product-service/product-service-docs.md`](product-service/product-service-docs.md) |
-| Order Service | [`order-service/order-docs.md`](order-service/order-docs.md) |
-| Inventory Service | [`inventory-service/inventory-docs.md`](inventory-service/inventory-docs.md) |
-| Notification Service | [`notification-service/notification-docs.md`](notification-service/notification-docs.md) |
-| AI Service | [`ai-service/ai-service-docs.md`](ai-service/ai-service-docs.md) |
-| API Gateway | [`api-gateway/api-gateway-docs.md`](api-gateway/api-gateway-docs.md) |
+| Service | Language | Documentation |
+|---|---|---|
+| Product Service | Python | [`product-service/product-service-docs.md`](product-service/product-service-docs.md) |
+| Order Service | Python | [`order-service/order-docs.md`](order-service/order-docs.md) |
+| Inventory Service | Python | [`inventory-service/inventory-docs.md`](inventory-service/inventory-docs.md) |
+| Notification Service | Python | [`notification-service/notification-docs.md`](notification-service/notification-docs.md) |
+| AI Service | Python | [`ai-service/ai-service-docs.md`](ai-service/ai-service-docs.md) |
+| API Gateway | Python | [`api-gateway/api-gateway-docs.md`](api-gateway/api-gateway-docs.md) |
+| Search Service | Java | [`search-service/search-service-docs.md`](search-service/search-service-docs.md) |
 
 ---
 
@@ -570,29 +691,36 @@ Phase 1 ✅ Infrastructure
   └── Docker Compose (Kafka, PostgreSQL, MongoDB, Keycloak, Observability)
 
 Phase 2 ✅ Core Services
-  ├── Product Service (MongoDB, Motor async)
-  ├── Inventory Service (PostgreSQL, SQLAlchemy async)
-  └── Order Service (PostgreSQL, httpx, aiokafka)
+  ├── Product Service (Python, MongoDB, Motor async)
+  ├── Inventory Service (Python, PostgreSQL, SQLAlchemy async)
+  └── Order Service (Python, PostgreSQL, httpx, aiokafka)
 
 Phase 3 ✅ Async Layer
-  └── Notification Service (Kafka consumer, Gmail SMTP)
+  └── Notification Service (Python, Kafka consumer, Gmail SMTP)
 
 Phase 4 ✅ AI Layer
-  └── AI Service (Groq/Llama 3.3 70B, provider-agnostic, Kafka consumer + producer)
+  └── AI Service (Python, Groq/Llama 3.3 70B, provider-agnostic, Kafka)
 
 Phase 5 ✅ Gateway & Security
-  └── API Gateway (routing, JWT validation via Keycloak, rate limiting)
+  └── API Gateway (Python, routing, JWT via Keycloak, rate limiting)
 
-Phase 6 🔲 Resilience
-  ├── Circuit Breaker (pybreaker)
-  ├── Retry + Backoff (tenacity)
-  ├── Timeouts (httpx)
-  └── Rate Limiting (slowapi) ✅ Done in Gateway
+Phase 6 🔲 Resilience & Reliability
+  ├── Outbox Pattern in Order Service (PostgreSQL — guaranteed Kafka delivery)
+  ├── Idempotency in Notification Service (Redis SET NX)
+  ├── Circuit Breaker on Order → Inventory (pybreaker)
+  ├── Retry + Backoff on Order → Inventory, AI → LLM (tenacity)
+  └── Timeouts on all HTTP calls (httpx)
 
-Phase 7 🔲 Observability
+Phase 7 🔲 Search Service (Java Spring Boot)
+  ├── Spring Boot 3.3 + Java 21
+  ├── Elasticsearch full-text search + autocomplete
+  ├── Kafka consumer (reindex on product-updated)
+  └── JUnit 5 + Mockito tests
+
+Phase 8 🔲 Observability
   └── Prometheus, Grafana, Loki, Tempo wiring
 
-Phase 8 🔲 CI/CD
+Phase 9 🔲 CI/CD
   └── GitHub Actions (lint → test → build → deploy)
 ```
 
