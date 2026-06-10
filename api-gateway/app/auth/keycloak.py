@@ -50,7 +50,7 @@ async def verify_token(request: Request) -> dict:
             algorithms=["RS256"],
             audience=settings.KEYCLOAK_CLIENT_ID,
             issuer=settings.KEYCLOAK_ISSUER,
-            options={"verify_exp": True},
+            options={"verify_exp": True, "verify_aud": False},
         )
 
         return payload

@@ -1,6 +1,8 @@
 # 🏗️ Polyglot Microservices — E-Commerce Platform with AI
 
-A production-grade microservices architecture built with **FastAPI**, **Spring Boot**, **Kafka**, **PostgreSQL**, **MongoDB**, **Elasticsearch**, **Redis**, and **Groq/Llama 3.3** — designed to demonstrate real-world patterns including event-driven communication, inter-service REST calls, JWT authentication, rate limiting, resilience patterns, full-text search, AI integration, and full-stack observability with metrics, logs, and distributed tracing.
+![CI](https://github.com/MicroServices-Project-Org/Python-Microservices/actions/workflows/ci.yml/badge.svg)
+
+A production-grade microservices architecture built with **FastAPI**, **Spring Boot**, **Kafka**, **PostgreSQL**, **MongoDB**, **Elasticsearch**, **Redis**, and **Groq/Llama 3.3** — designed to demonstrate real-world patterns including event-driven communication, inter-service REST calls, JWT authentication, rate limiting, resilience patterns, full-text search, AI integration, full-stack observability with metrics + logs + distributed tracing, and a CI pipeline that runs all 210+ tests on every PR.
 
 **Polyglot architecture:** Python services for core e-commerce + AI, Java service for search — demonstrating that microservices allow each service to use the best language for the job.
 
@@ -104,6 +106,7 @@ All 7 services expose Prometheus metrics, emit JSON logs to Loki, and (Python se
 | **Rate Limiting** | slowapi |
 | **Resilience** | tenacity (retry), custom async circuit breaker, Spring `@Scheduled` (diff-and-reconcile) |
 | **Observability** | Prometheus 2.51, Grafana 10.4, Loki 2.9, Tempo 2.4, Promtail, Micrometer, prometheus-fastapi-instrumentator, OpenTelemetry (FastAPI + httpx + logging + aiokafka instrumentation) |
+| **CI/CD** | GitHub Actions (matrix-based parallel testing, pip + Maven caching, ruff lint) |
 | **Containerization** | Docker, Docker Compose |
 | **Testing** | pytest, pytest-asyncio, unittest.mock, JUnit 5, Mockito |
 
@@ -114,9 +117,13 @@ All 7 services expose Prometheus metrics, emit JSON logs to Loki, and (Python se
 ```
 Python-Microservices/
 │
+├── .github/
+│   └── workflows/
+│       └── ci.yml                        # GitHub Actions CI pipeline
+│
 ├── api-gateway/                          # Python — FastAPI
 │   ├── app/
-│   │   ├── main.py                       # Proxy routes, /metrics, /tracing
+│   │   ├── main.py                       # Proxy routes, /metrics, tracing
 │   │   ├── config.py
 │   │   ├── logging_config.py             # JSON logs with trace_id/span_id
 │   │   ├── tracing_config.py             # OpenTelemetry setup → Tempo
@@ -154,7 +161,7 @@ Python-Microservices/
 │   │   │   └── outbox_worker.py          # Background worker: outbox → Kafka
 │   │   ├── clients/inventory_client.py
 │   │   └── kafka/producer.py
-│   └── tests/
+│   └── tests/                            # 52 tests
 │
 ├── inventory-service/                    # Python — FastAPI + PostgreSQL
 │   ├── app/
@@ -164,7 +171,7 @@ Python-Microservices/
 │   │   ├── models/inventory.py
 │   │   ├── routes/inventory_routes.py
 │   │   └── services/inventory_service.py
-│   └── tests/
+│   └── tests/                            # 18 tests
 │
 ├── notification-service/                 # Python — FastAPI + Kafka + Redis
 │   ├── app/
@@ -173,7 +180,7 @@ Python-Microservices/
 │   │   ├── tracing_config.py
 │   │   ├── kafka/consumer.py
 │   │   └── services/email_service.py
-│   └── tests/
+│   └── tests/                            # 42 tests
 │
 ├── ai-service/                           # Python — FastAPI + Kafka + LLM + Redis cache
 │   ├── app/
@@ -186,7 +193,7 @@ Python-Microservices/
 │   │   ├── routes/ai_routes.py
 │   │   ├── services/
 │   │   └── kafka/
-│   └── tests/
+│   └── tests/                            # 45 tests
 │
 ├── search-service/                       # Java — Spring Boot + Elasticsearch
 │   ├── src/main/java/com/ecommerce/search/
@@ -215,7 +222,7 @@ Python-Microservices/
 │   ├── promtail/promtail-config.yaml         # Tails Docker + service log files
 │   └── tempo/tempo-config.yaml
 │
-├── logs/                                     # Gitignored — service JSON logs (Promtail tails these)
+├── logs/                                     # Gitignored — service JSON logs
 ├── docker-compose.yml
 └── README.md
 ```
@@ -597,15 +604,15 @@ curl -X POST http://localhost:9000/api/orders \
 
 | Service | Language | Tests | Covers |
 |---|---|---|---|
-| API Gateway | Python | 30 | Routing, proxying, JWT |
+| API Gateway | Python | 31 | Routing, proxying, JWT |
 | Product Service | Python | 22 | CRUD, search, Kafka publishing |
-| Order Service | Python | 15 | Order creation, stock checks, Kafka |
-| Inventory Service | Python | 20 | CRUD, stock check, reduce, restock |
-| Notification Service | Python | 34 | Email templates, SMTP, Kafka routing |
-| AI Service | Python | 44 | All 3 LLM providers, 4 AI features |
+| Order Service | Python | 52 | Order creation, stock checks, cancellation, outbox, circuit breaker |
+| Inventory Service | Python | 18 | CRUD, stock check, reduce, restock |
+| Notification Service | Python | 42 | Email templates, SMTP, Kafka routing |
+| AI Service | Python | 45 | All 3 LLM providers, 4 AI features |
 | Search Service | Java | 25 | Search, fuzzy match, autocomplete, diff-and-reconcile |
 
-**Total: 190+ unit tests**
+**Total: 235+ unit tests**
 
 ```bash
 # Python
@@ -614,6 +621,49 @@ cd <service> && source venv/bin/activate && pytest -v
 # Java
 cd search-service && mvn test
 ```
+
+---
+
+## ⚙️ CI/CD
+
+Every PR and every push to `main` triggers a GitHub Actions workflow that runs the full test suite. The workflow is defined in `.github/workflows/ci.yml`.
+
+### Pipeline structure
+
+```
+On PR / push to main:
+  ├── Python tests (matrix, parallel)
+  │     ├── api-gateway       → pytest
+  │     ├── product-service   → pytest
+  │     ├── order-service     → pytest
+  │     ├── inventory-service → pytest
+  │     ├── notification-service → pytest
+  │     └── ai-service        → pytest
+  ├── Java tests
+  │     └── search-service    → mvn test
+  └── Lint
+        └── ruff check (non-blocking)
+```
+
+### What each job does
+
+| Job | Tool | Caching | Notes |
+|---|---|---|---|
+| Python tests (×6) | pytest | pip cache per service | Matrix runs in parallel, `fail-fast: false` so all failures surface |
+| Java tests | Maven | Maven repo cache | First run ~5 min, cached runs ~30s |
+| Lint | ruff | — | `continue-on-error: true` — runs but doesn't block PRs initially |
+
+### Why this design
+
+- **Matrix strategy** = 6 Python services in parallel. End-to-end pipeline runs in ~3-5 min instead of ~15 min serially.
+- **`fail-fast: false`** = if one service breaks, the others still run. Surfacing all failures is more useful than stopping at the first.
+- **Caching** = subsequent runs are dramatically faster. pip and Maven both hash the lockfile/pom to invalidate appropriately.
+- **No integration tests in CI** = unit tests fully mock external dependencies (Kafka, Postgres, MongoDB, Redis). CI focuses on logic correctness, not deployment health. Integration testing happens locally via Docker Compose.
+- **Lint non-blocking** = ruff finds lots of style nits on a project this size. We'll tighten over time without blocking ongoing work.
+
+### Status check
+
+The CI workflow appears as a status check on every PR. Branch protection on `main` requires all required checks to pass before merging.
 
 ---
 
@@ -754,6 +804,7 @@ A `POST /api/orders` produces ~18 spans across api-gateway, order-service, and i
 | Anaconda interfering with async event loop | venv inherited Anaconda's sys.path | Removed Anaconda, used Homebrew Python |
 | MongoDB auth failing from host to Docker | SCRAM auth broken over Docker TCP bridge on Mac | Disabled auth for local dev |
 | `motor` + `pymongo` version incompatibility | Motor relied on removed PyMongo internals | Pinned compatible versions |
+| PostgreSQL init script not running | Data volume already initialized | `docker-compose down -v` to reset |
 | Port conflicts on Mac (8080, 5432) | Local processes occupying ports | Remapped to 8081, 5433 |
 | SQLAlchemy async missing `greenlet` | Not auto-installed | Added to requirements.txt |
 | Gemini daily rate limit exhausted | Kafka burst + retry cascading | Switched to Groq, added throttling |
@@ -772,6 +823,9 @@ A `POST /api/orders` produces ~18 spans across api-gateway, order-service, and i
 | Promtail Docker scrape error: client version 1.42 too old | Docker API requires 1.44+ now | Ignored for service-log path; will upgrade Promtail in future PR |
 | `LoggingInstrumentor` didn't inject trace_id into JSON logs | Field names didn't line up with formatter expectations | Custom `ContextFilter` that pulls `trace_id`/`span_id` from `opentelemetry.trace.get_current_span()` directly |
 | Inventory Service crashed: `No module named 'httpx'` | OTel httpx instrumentation imports httpx even if service doesn't use it | `pip install httpx` in inventory-service venv |
+| CI failed: `No module named 'bson'` | requirements.txt missing transitive deps (motor→pymongo→bson) | Regenerated all 6 services' requirements.txt via `pip freeze` |
+| Order Service tests broke after outbox refactor | Tests patched `publish_order_placed` which no longer exists | Replaced with assertion that an Outbox row was added |
+| inventory-service tests had `ModuleNotFoundError: No module named 'app'` | pytest.ini missing `pythonpath = .` | Added to pytest.ini |
 
 ---
 
@@ -836,14 +890,20 @@ Phase 8.3 ✅ Observability — Distributed Tracing
   ├── Verified end-to-end trace: api-gateway → order → inventory (~18 spans)
   └── Log↔Trace correlation via custom ContextFilter
 
-Phase 9 🔲 CI/CD
-  └── GitHub Actions (lint → test → build → deploy)
+Phase 9 ✅ CI/CD
+  ├── GitHub Actions workflow on every PR + push to main
+  ├── Matrix strategy: 6 Python services tested in parallel
+  ├── Java Search Service tested with mvn test
+  ├── pip and Maven caching for fast re-runs
+  ├── Ruff lint job (non-blocking initially)
+  └── Branch protection on main requires all checks to pass
 
 Future / nice-to-have:
-  - Containerize services (currently run on host for dev speed)
-  - Kafka span propagation (so notification + AI consumers join the trace)
+  - Containerize services (currently run on host for dev iteration speed)
+  - Kafka span propagation (notification + AI consumer spans join the request trace)
   - OpenTelemetry on Search Service (Java)
-  - Alertmanager + Slack/email routing
+  - Docker image builds in CI → push to ghcr.io
+  - Alertmanager + Slack/email routing on metric thresholds
 ```
 
 ---
@@ -858,7 +918,8 @@ Future / nice-to-have:
 - **Custom async circuit breaker** (~80 LOC) when pybreaker proved incompatible with Python 3.12
 - **Provider-agnostic LLM layer** supporting Groq, Gemini, and Ollama with a one-line config switch
 - **Full-stack observability** — Prometheus metrics, JSON-structured logs in Loki, OpenTelemetry distributed traces in Tempo. One `trace_id` stitches together ~18 spans across 3 services for a single order request, and the same `trace_id` appears in every log line, enabling one-click pivot from log to trace in Grafana
-- **190+ unit tests** across 7 services using pytest, JUnit 5, and Mockito
+- **CI/CD with GitHub Actions** — every PR runs the full test suite (235+ tests) across all 7 services in parallel via matrix strategy; pip and Maven caching keep runs under 5 minutes; branch protection on main requires green checks before merge
+- **235+ unit tests** across 7 services using pytest, JUnit 5, and Mockito
 
 ---
 
