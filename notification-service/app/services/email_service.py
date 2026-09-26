@@ -89,19 +89,3 @@ def build_order_cancelled_email(event: dict) -> tuple[str, str]:
     """
     return subject, body
 
-
-def build_inventory_low_email(event: dict) -> tuple[str, str]:
-    """Returns (subject, body_html) for low stock alert (sent to admin)."""
-    subject = f"⚠️ Low Stock Alert — {event.get('product_name', 'Unknown Product')}"
-    body = f"""
-    <html>
-    <body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
-        <h2 style="color:#d69e2e">Low Stock Alert ⚠️</h2>
-        <p>Product <strong>{event.get('product_name', 'N/A')}</strong>
-           (ID: {event.get('product_id', 'N/A')}) is running low.</p>
-        <p>Current quantity: <strong>{event.get('quantity', 'N/A')}</strong></p>
-        <p>Please restock soon to avoid stockouts.</p>
-    </body>
-    </html>
-    """
-    return subject, body

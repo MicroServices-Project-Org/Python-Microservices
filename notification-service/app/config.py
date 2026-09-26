@@ -10,7 +10,6 @@ class Settings(BaseSettings):
     KAFKA_GROUP_ID: str = "notification-group"
     KAFKA_ORDER_PLACED_TOPIC: str = "order-placed"
     KAFKA_ORDER_CANCELLED_TOPIC: str = "order-cancelled"
-    KAFKA_INVENTORY_LOW_TOPIC: str = "inventory-low"
     KAFKA_AI_NOTIFICATION_READY_TOPIC: str = "ai-notification-ready"
 
     # Gmail SMTP

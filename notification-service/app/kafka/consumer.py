@@ -8,7 +8,6 @@ from app.services.email_service import (
     send_email,
     build_order_confirmation_email,
     build_order_cancelled_email,
-    build_inventory_low_email,
 )
 
 logger = logging.getLogger(__name__)
@@ -75,11 +74,10 @@ async def start_consumer():
 
 
 async def _consume():
-    """Subscribes to all 4 topics and routes each event to the appropriate handler."""
+    """Subscribes to all 3 topics and routes each event to the appropriate handler."""
     consumer = AIOKafkaConsumer(
         settings.KAFKA_ORDER_PLACED_TOPIC,
         settings.KAFKA_ORDER_CANCELLED_TOPIC,
-        settings.KAFKA_INVENTORY_LOW_TOPIC,
         settings.KAFKA_AI_NOTIFICATION_READY_TOPIC,
         bootstrap_servers=settings.KAFKA_BOOTSTRAP_SERVERS,
         group_id=settings.KAFKA_GROUP_ID,
@@ -94,7 +92,6 @@ async def _consume():
             f"📡 Kafka consumer listening on: "
             f"{settings.KAFKA_ORDER_PLACED_TOPIC}, "
             f"{settings.KAFKA_ORDER_CANCELLED_TOPIC}, "
-            f"{settings.KAFKA_INVENTORY_LOW_TOPIC}, "
             f"{settings.KAFKA_AI_NOTIFICATION_READY_TOPIC}"
         )
 
@@ -115,9 +112,6 @@ async def _handle_message(topic: str, event: dict):
 
     elif topic == settings.KAFKA_ORDER_CANCELLED_TOPIC:
         await _handle_order_cancelled(event)
-
-    elif topic == settings.KAFKA_INVENTORY_LOW_TOPIC:
-        await _handle_inventory_low(event)
 
     elif topic == settings.KAFKA_AI_NOTIFICATION_READY_TOPIC:
         await _handle_ai_notification(event)
@@ -150,20 +144,6 @@ async def _handle_order_cancelled(event: dict):
     print(f"🚫 Processing order-cancelled: {event.get('order_number')}")
     subject, body = build_order_cancelled_email(event)
     await send_email(event["customer_email"], subject, body)
-
-
-async def _handle_inventory_low(event: dict):
-    """Handles inventory-low events — sends alert to admin."""
-    event_key = f"{event.get('product_id')}_INVENTORY_LOW"
-
-    if await _is_duplicate(event_key):
-        print(f"⚠️ Duplicate skipped: {event_key}")
-        return
-
-    print(f"⚠️ Processing inventory-low: {event.get('product_id')}")
-    subject, body = build_inventory_low_email(event)
-    admin_email = settings.SMTP_FROM_EMAIL or "admin@example.com"
-    await send_email(admin_email, subject, body)
 
 
 async def _handle_ai_notification(event: dict):
