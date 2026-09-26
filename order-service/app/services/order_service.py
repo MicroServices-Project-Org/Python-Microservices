@@ -150,20 +150,23 @@ async def update_order_status(
     order = await get_order(order_id, db)
     order.status = data.status
     await db.flush()
-    await db.refresh(order, ["items"])
+    # updated_at is set by the DB on UPDATE (onupdate=func.now()), so the flush expires it.
+    # Reload it here: a lazy load during response serialization raises MissingGreenlet (500).
+    await db.refresh(order, ["updated_at", "items"])
     return order
 
 
 async def cancel_order(order_id: str, db: AsyncSession) -> Order:
     order = await get_order(order_id, db)
-    if order.status in [OrderStatus.SHIPPED, OrderStatus.DELIVERED]:
+    # Already-cancelled orders are rejected too, so a retry can't publish a second order-cancelled event
+    if order.status in [OrderStatus.SHIPPED, OrderStatus.DELIVERED, OrderStatus.CANCELLED]:
         raise HTTPException(
             status_code=400,
             detail=f"Cannot cancel order with status {order.status}",
         )
     order.status = OrderStatus.CANCELLED
     await db.flush()
-    await db.refresh(order, ["items"])
+    await db.refresh(order, ["updated_at", "items"])  # see update_order_status
 
     # Save cancellation event to outbox
     event = _build_order_event(order, "ORDER_CANCELLED")
