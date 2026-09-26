@@ -54,7 +54,7 @@ mvn test -Dtest=DiffReconcileJobTest
 ```
 
 - `pytest.ini` in each service sets `asyncio_mode = auto` and `testpaths = tests`. Tests must be run with the service directory as the working directory so that `app.` imports resolve.
-- Tests read your local `.env`. For example, `AUTH_ENABLED=true` in `api-gateway/.env` makes 21 gateway tests fail with 401. If tests fail locally but pass in CI, run with the relevant env var overridden (`AUTH_ENABLED=false pytest`).
+- Tests ignore your local `.env`. Each service's `tests/conftest.py` replaces `app.config.settings` with `Settings(_env_file=None)` before any test module is imported, so tests see the `config.py` defaults, the same as CI. Shell env vars still override (`AUTH_ENABLED=true pytest`). Keep `app/config.py` free of `app.*` imports, or the swap can happen too late.
 - All tests are unit tests. They need no running infrastructure because DB sessions, Kafka, httpx, Redis, and LLM clients are mocked with `unittest.mock` (`AsyncMock`/`MagicMock`/`patch`). Gateway tests use `httpx.ASGITransport` against `app.main.app` and patch `app.main.http_client`. Follow these patterns and do not add tests that need live services.
 - `scripts/test-keycloak-flow.sh` is an end-to-end auth check. It needs `docker-compose up -d` plus the gateway running with `AUTH_ENABLED=true`, and exits non-zero on failure. Note that the gateway disables JWT audience verification (`verify_aud: False` in `api-gateway/app/auth/keycloak.py`).
 - CI (`.github/workflows/ci.yml`) runs a matrix of `pip install -r requirements.txt && pytest -v` for each Python service, `mvn test` for search, and `ruff check .` (non-blocking). `docker-validate.yml` checks compose/config files, runs hadolint on Dockerfiles, and requires `docker/postgres/init-multiple-dbs.sh` to stay executable.
@@ -84,4 +84,4 @@ mvn test -Dtest=DiffReconcileJobTest
 - Tables are created by `Base.metadata.create_all` in `lifespan`. There are no migrations, so a schema change on an existing table needs a manual `ALTER` or a dropped volume.
 - Use Homebrew Python 3.12, not Anaconda (it breaks the asyncio loop). Search needs Java 21 exactly, because Mockito/Byte Buddy fails on newer JDKs.
 - Per-service doc filenames aren't uniform (`ai-service/ai-docs.md`, `api-gateway/gw-docs.md`). Use the README's "Service Documentation" table as the index, and update it if you add or rename a doc. Notification has no doc yet.
-- `KNOWN_ISSUES.md` lists open mismatches between the code and the docs. Update it when you fix one.
+- `KNOWN_ISSUES.md` lists open bugs, code/doc mismatches, and the infra roadmap. When you fix an issue, replace its write-up with a row in the Fixed table (with the PR number), and don't renumber the rest.
