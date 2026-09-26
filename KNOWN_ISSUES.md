@@ -10,7 +10,7 @@ None right now.
 
 | # | Issue | PR |
 |---|---|---|
-| 1 | AI Service Redis cache was documented but not implemented. LLM output validation landed first in #28 | TBD |
+| 1 | AI Service Redis cache was documented but not implemented. LLM output validation landed first in #28 | #29 |
 | 2 | Duplicate `ReconciliationJob` in Search Service ran every sync twice | #25 |
 | 3 | Broken links in the README's "Service Documentation" table | #24 |
 | 4 | AI Service defaulted to Gemini instead of Groq, and `factory.py` listed an OpenAI provider that didn't exist | #22 |
