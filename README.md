@@ -701,9 +701,18 @@ docker ps --format "table {{.Names}}\t{{.Status}}"
 - Docker Desktop
 - Groq API key (free at https://console.groq.com/keys)
 
-### Step 1 — Start Infrastructure
+### Step 1 — Configure and Start Infrastructure
 ```bash
 cd Python-Microservices
+
+# Create .env files from the examples, then replace the your-* placeholders
+cp .env.example .env
+for s in api-gateway product-service order-service inventory-service notification-service ai-service; do
+  cp -n $s/.env.example $s/.env
+done
+# At minimum: GROQ_API_KEY in ai-service/.env, and matching Postgres
+# credentials in .env, order-service/.env, and inventory-service/.env
+
 docker-compose up -d
 ```
 

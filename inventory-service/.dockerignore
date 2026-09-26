@@ -1,0 +1,11 @@
+# Keep secrets and local artifacts out of the build context
+.env
+.env.*
+venv/
+.venv/
+**/__pycache__/
+**/*.py[cod]
+.pytest_cache/
+tests/
+postman-collection/
+*.md

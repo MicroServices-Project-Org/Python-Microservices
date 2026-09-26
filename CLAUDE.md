@@ -34,6 +34,8 @@ cd search-service && mvn spring-boot:run
 
 Because the services run on the host, Prometheus scrapes them at `host.docker.internal:<port>` (`docker/prometheus/prometheus.yml`), and Promtail tails the JSON log files in `./logs/`. Keep both in mind if you containerize a service.
 
+**Config:** each Python service reads its own `<service>/.env` (gitignored), and the root `.env` is read only by `docker-compose.yml`. Each has a committed `.env.example` with every key, using default values or `your-*` placeholders for secrets. `Settings` forbids unknown keys, so a stale key in `.env` crashes startup. **If you add, rename, or remove a `Settings` field, update that service's `.env.example` too.** `tests/unit/test_env_example.py` fails CI if they drift.
+
 Defaults in each `config.py` point at `localhost`. Useful flags:
 - `api-gateway`: `AUTH_ENABLED=false` by default (JWT checks are skipped).
 - `notification-service`: `EMAIL_ENABLED=false` by default (no real SMTP).
@@ -52,6 +54,7 @@ mvn test -Dtest=DiffReconcileJobTest
 ```
 
 - `pytest.ini` in each service sets `asyncio_mode = auto` and `testpaths = tests`. Tests must be run with the service directory as the working directory so that `app.` imports resolve.
+- Tests read your local `.env`. For example, `AUTH_ENABLED=true` in `api-gateway/.env` makes 21 gateway tests fail with 401. If tests fail locally but pass in CI, run with the relevant env var overridden (`AUTH_ENABLED=false pytest`).
 - All tests are unit tests. They need no running infrastructure because DB sessions, Kafka, httpx, Redis, and LLM clients are mocked with `unittest.mock` (`AsyncMock`/`MagicMock`/`patch`). Gateway tests use `httpx.ASGITransport` against `app.main.app` and patch `app.main.http_client`. Follow these patterns and do not add tests that need live services.
 - `scripts/test-keycloak-flow.sh` is an end-to-end auth check. It needs `docker-compose up -d` plus the gateway running with `AUTH_ENABLED=true`, and exits non-zero on failure. Note that the gateway disables JWT audience verification (`verify_aud: False` in `api-gateway/app/auth/keycloak.py`).
 - CI (`.github/workflows/ci.yml`) runs a matrix of `pip install -r requirements.txt && pytest -v` for each Python service, `mvn test` for search, and `ruff check .` (non-blocking). `docker-validate.yml` checks compose/config files, runs hadolint on Dockerfiles, and requires `docker/postgres/init-multiple-dbs.sh` to stay executable.

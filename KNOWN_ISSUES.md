@@ -36,6 +36,13 @@ The first part lists places where the code and the docs disagree, found while wr
 - **Problem:** The README says Groq/Llama 3.3 is the current provider and lists moving off Gemini (daily rate-limit exhaustion) as a fix. If `.env` doesn't set `LLM_PROVIDER`, the service still starts on Gemini. Also, the docstring and error message in `app/llm/factory.py` list `openai` as supported and call Groq "future". Neither is true: there is no OpenAI client, and Groq is implemented.
 - **Fix:** Change the default to `"groq"` and update the text in `factory.py` so the supported providers are `gemini, groq, ollama`.
 
+## 5. Unit tests depend on the developer's local `.env`
+
+- **Where:** all Python services. `app/config.py` loads `.env` when imported, and tests import `app.*`.
+- **Problem:** tests run with whatever is in your local `.env`. With `AUTH_ENABLED=true` in `api-gateway/.env` (as used for the Keycloak flow test), 21 of 34 gateway tests fail with `401`. CI has no `.env`, so it stays green, and a local run can look like a regression when it isn't.
+- **Workaround:** `AUTH_ENABLED=false pytest`.
+- **Fix:** add a `tests/conftest.py` that isolates settings, e.g. by setting the env vars tests rely on, or by patching `settings` to known values, so results don't depend on the local `.env`.
+
 ---
 
 # Roadmap / TODOs
@@ -58,7 +65,7 @@ Do these in order. Each step depends on the ones before it. The status of each w
 **Status:** compose only defines infrastructure. Every service has a Dockerfile, but they have the problems below.
 
 **Blockers found:**
-- [ ] **No `.dockerignore` anywhere.** `api-gateway`, `notification-service`, and `ai-service` use `COPY . .`, which copies `venv/`, `tests/`, and **`.env` (containing secrets such as the Groq key and SMTP password)** into the image. Add a `.dockerignore` to each service, or switch them to the multi-stage `COPY app/ ./app/` pattern that product, order, and inventory already use.
+- [x] **No `.dockerignore` anywhere.** Fixed: each Python service now has a `.dockerignore` excluding `.env*`, `venv/`, `tests/`, and caches. Still worth switching `api-gateway`, `notification-service`, and `ai-service` from `COPY . .` to the multi-stage `COPY app/ ./app/` pattern for consistency.
 - [ ] **The search-service Dockerfile needs a prebuilt jar** (`COPY target/search-service-1.0.0.jar`). `docker compose build` fails on a clean checkout. Convert it to a multi-stage Maven build.
 - [ ] **Hostnames:** every `config.py` and `application.yml` defaults to `localhost`. Set env overrides in compose, e.g. `MONGO_HOST=mongodb`, `POSTGRES_HOST=postgres`, `POSTGRES_PORT=5432` (internal port, not 5433), `KAFKA_BOOTSTRAP_SERVERS=kafka:29092` (internal listener), `REDIS_HOST=redis`, service URLs such as `http://inventory-service:8003`, `OTLP_ENDPOINT=http://tempo:4317`, and for search `SPRING_ELASTICSEARCH_URIS`, `SPRING_KAFKA_BOOTSTRAP_SERVERS`, and `PRODUCT_SERVICE_URL`.
 - [ ] **Log path:** `logging_config.py` resolves `LOG_DIR` to `/logs` inside the container. Set `LOG_DIR` and mount `./logs`, or drop the file handler in containers and let Promtail read Docker stdout. Promtail's Docker scrape is currently broken (API version 1.42 is too old), so upgrading Promtail may be required.
