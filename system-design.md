@@ -244,7 +244,6 @@ PlaceOrder()  ───────►  { order_number,     ──► Notificati
 |---|---|---|---|
 | `order-placed` | Order Service | Notification, AI Service | New order created |
 | `order-cancelled` | Order Service | Notification, Inventory | Order cancelled |
-| `inventory-low` | Inventory Service | Notification Service | Stock alert |
 | `ai-notification-ready` | AI Service | Notification Service | Personalized email ready |
 
 ### Event Schema — `order-placed`
@@ -596,7 +595,8 @@ Asynchronous (Kafka):
   Order Service  → [order-placed topic]      → Notification Service
   Order Service  → [order-placed topic]      → AI Service
   AI Service     → [ai-notification-ready]   → Notification Service
-  Inventory Svc  → [inventory-low topic]     → Notification Service
+  Order Service  → [order-cancelled topic]   → Notification Service, Inventory Service
+  Product Svc    → [product-updated topic]   → Search Service, AI Service
 ```
 
 ---

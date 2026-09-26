@@ -4,7 +4,6 @@ from app.services.email_service import (
     send_email,
     build_order_confirmation_email,
     build_order_cancelled_email,
-    build_inventory_low_email,
 )
 
 
@@ -35,15 +34,6 @@ def make_order_cancelled_event():
         "customer_name": "Yash Vyas",
         "customer_email": "yash@example.com",
     }
-
-def make_inventory_low_event():
-    return {
-        "event_type": "INVENTORY_LOW",
-        "product_id": "prod-001",
-        "product_name": "iPhone 15 Pro",
-        "quantity": 3,
-    }
-
 
 # ─── build_order_confirmation_email ──────────────────────────────────────────
 
@@ -113,35 +103,6 @@ def test_order_cancelled_body_contains_order_number():
     event = make_order_cancelled_event()
     _, body = build_order_cancelled_email(event)
     assert "ORD-20260221-6BA0A415" in body
-
-
-# ─── build_inventory_low_email ───────────────────────────────────────────────
-
-def test_inventory_low_subject_contains_product_name():
-    event = make_inventory_low_event()
-    subject, _ = build_inventory_low_email(event)
-    assert "iPhone 15 Pro" in subject
-
-def test_inventory_low_body_contains_product_id():
-    event = make_inventory_low_event()
-    _, body = build_inventory_low_email(event)
-    assert "prod-001" in body
-
-def test_inventory_low_body_contains_quantity():
-    event = make_inventory_low_event()
-    _, body = build_inventory_low_email(event)
-    assert "3" in body
-
-def test_inventory_low_missing_product_name():
-    event = {"product_id": "prod-001", "quantity": 3}
-    subject, _ = build_inventory_low_email(event)
-    assert "Unknown Product" in subject
-
-def test_inventory_low_missing_all_fields():
-    event = {}
-    subject, body = build_inventory_low_email(event)
-    assert "Unknown Product" in subject
-    assert "N/A" in body
 
 
 # ─── send_email (disabled mode) ─────────────────────────────────────────────

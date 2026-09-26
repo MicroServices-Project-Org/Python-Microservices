@@ -4,7 +4,6 @@ from app.kafka.consumer import (
     _handle_message,
     _handle_order_placed,
     _handle_order_cancelled,
-    _handle_inventory_low,
     _handle_ai_notification,
     _is_duplicate,
 )
@@ -37,14 +36,6 @@ def make_order_cancelled_event():
         "customer_email": "yash@example.com",
     }
 
-def make_inventory_low_event():
-    return {
-        "event_type": "INVENTORY_LOW",
-        "product_id": "prod-001",
-        "product_name": "iPhone 15 Pro",
-        "quantity": 3,
-    }
-
 def make_ai_notification_event():
     return {
         "order_number": "ORD-20260221-6BA0A415",
@@ -68,13 +59,6 @@ async def test_handle_message_routes_order_placed(mock_handler):
 async def test_handle_message_routes_order_cancelled(mock_handler):
     event = make_order_cancelled_event()
     await _handle_message("order-cancelled", event)
-    mock_handler.assert_called_once_with(event)
-
-@pytest.mark.asyncio
-@patch("app.kafka.consumer._handle_inventory_low", new_callable=AsyncMock)
-async def test_handle_message_routes_inventory_low(mock_handler):
-    event = make_inventory_low_event()
-    await _handle_message("inventory-low", event)
     mock_handler.assert_called_once_with(event)
 
 @pytest.mark.asyncio
@@ -146,45 +130,6 @@ async def test_handle_order_cancelled_sends_email(mock_build, mock_send, mock_du
 async def test_handle_order_cancelled_skips_duplicate(mock_send, mock_dup):
     event = make_order_cancelled_event()
     await _handle_order_cancelled(event)
-    mock_send.assert_not_called()
-
-
-# ─── _handle_inventory_low ──────────────────────────────────────────────────
-
-@pytest.mark.asyncio
-@patch("app.kafka.consumer._is_duplicate", new_callable=AsyncMock, return_value=False)
-@patch("app.kafka.consumer.settings")
-@patch("app.kafka.consumer.send_email", new_callable=AsyncMock, return_value=True)
-@patch("app.kafka.consumer.build_inventory_low_email")
-async def test_handle_inventory_low_sends_to_admin(mock_build, mock_send, mock_settings, mock_dup):
-    mock_settings.SMTP_FROM_EMAIL = "admin@store.com"
-    mock_build.return_value = ("Low Stock", "<p>Low stock</p>")
-    event = make_inventory_low_event()
-
-    await _handle_inventory_low(event)
-
-    mock_build.assert_called_once_with(event)
-    mock_send.assert_called_once_with("admin@store.com", "Low Stock", "<p>Low stock</p>")
-
-@pytest.mark.asyncio
-@patch("app.kafka.consumer._is_duplicate", new_callable=AsyncMock, return_value=False)
-@patch("app.kafka.consumer.settings")
-@patch("app.kafka.consumer.send_email", new_callable=AsyncMock, return_value=True)
-@patch("app.kafka.consumer.build_inventory_low_email")
-async def test_handle_inventory_low_fallback_admin_email(mock_build, mock_send, mock_settings, mock_dup):
-    mock_settings.SMTP_FROM_EMAIL = ""
-    mock_build.return_value = ("Low Stock", "<p>Low stock</p>")
-    event = make_inventory_low_event()
-
-    await _handle_inventory_low(event)
-    mock_send.assert_called_once_with("admin@example.com", "Low Stock", "<p>Low stock</p>")
-
-@pytest.mark.asyncio
-@patch("app.kafka.consumer._is_duplicate", new_callable=AsyncMock, return_value=True)
-@patch("app.kafka.consumer.send_email", new_callable=AsyncMock)
-async def test_handle_inventory_low_skips_duplicate(mock_send, mock_dup):
-    event = make_inventory_low_event()
-    await _handle_inventory_low(event)
     mock_send.assert_not_called()
 
 

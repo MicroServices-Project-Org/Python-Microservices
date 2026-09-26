@@ -6,11 +6,7 @@ Open bugs and code/doc mismatches come first, then fixed issues, then the infras
 
 Found during a full end-to-end run (all 7 services plus infra, through the gateway with a Keycloak token) and two live Kafka-outage tests on 2026-09-26.
 
-## 13. Nothing publishes `inventory-low`
-
-- **Where:** README ("Asynchronous (Kafka)" and "Kafka Topics") and CLAUDE.md ("Kafka topics")
-- **Problem:** notification-service consumes `inventory-low` and has an email template for it, but no service produces it. README says Inventory Service publishes it, and CLAUDE.md says the AI service does. inventory-service had no Kafka code at all before #38, and `ai-service` never references the topic.
-- **Fix:** Decide whether low-stock alerts are wanted. If so, publish from inventory-service when `reduce_stock` takes `available_qty` below a threshold (ideally through an outbox, like order-service). Otherwise, remove the topic from the docs and notification-service.
+None right now.
 
 # Fixed Issues
 
@@ -28,6 +24,7 @@ Found during a full end-to-end run (all 7 services plus infra, through the gatew
 | 10 | aiokafka consumer seemed stuck after an unclean Kafka restart (seen once, on pre-#33 code). **Closed, could not reproduce:** after `docker kill kafka`, and after killing Kafka + ZooKeeper together (Kafka's first start hit the same `NodeExists` crash, then restarted), all three consumer groups rejoined within ~30s and live events flowed end to end. If it comes back, add a watchdog that recreates a consumer with no partition assignment for N minutes | #37 |
 | 11 | Cancelling an order didn't restock inventory. inventory-service now consumes `order-cancelled` and adds the stock back, idempotently (`processed_events` row in the same transaction), with offsets committed only after the restock commits | #38 |
 | 12 | AI recommendations could include the product you asked about. Filtered out (normalized exact name) on both fresh and cached results, and the prompt now tells the model not to pick it | #37 |
+| 13 | Nothing published `inventory-low`, but notification-service consumed it and the docs described low-stock alerts (README said inventory produced it, CLAUDE.md said AI). Feature removed: the consumer, email template, setting, and tests, plus the docs | #39 |
 | — | All six `app/config.py` typed `model_config` as pydantic's `ConfigDict` instead of `SettingsConfigDict` (Pylance errors, no runtime effect) | #30 |
 | — | Groq retired `llama-3.3-70b-versatile` (404 `model_not_found`). Default switched to `openai/gpt-oss-120b` | #29 |
 | — | Keycloak healthcheck never passed (no `curl` in image, wrong port, health endpoints disabled) | #26 |
