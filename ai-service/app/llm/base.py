@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 class LLMClient(ABC):
     """
     Abstract base class for LLM providers.
-    To add a new provider (OpenAI, Groq, Ollama):
+    To add a new provider (e.g. OpenAI):
       1. Create a new class that extends LLMClient
       2. Implement the generate() method
       3. Register it in factory.py

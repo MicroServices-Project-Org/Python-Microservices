@@ -8,15 +8,11 @@ class Settings(BaseSettings):
 
     # LLM Provider — change this to swap providers
     # Options: "gemini", "groq", "ollama"
-    LLM_PROVIDER: str = "gemini"
+    LLM_PROVIDER: str = "groq"
 
     # Google Gemini
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-2.0-flash"
-
-    # OpenAI (future)
-    OPENAI_API_KEY: str = ""
-    OPENAI_MODEL: str = "gpt-4o"
 
     # Groq
     GROQ_API_KEY: str = ""

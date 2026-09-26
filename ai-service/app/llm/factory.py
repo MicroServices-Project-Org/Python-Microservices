@@ -9,9 +9,9 @@ def get_llm_client() -> LLMClient:
     """
     Factory function that returns the configured LLM client.
     To swap providers, change LLM_PROVIDER in .env:
+      - "groq"    → Groq / Llama 3.3 70B (default)
       - "gemini"  → Google Gemini (free tier)
-      - "openai"  → OpenAI (future)
-      - "groq"    → Groq (future)
+      - "ollama"  → Ollama (local)
     """
     provider = settings.LLM_PROVIDER.lower()
 
@@ -26,7 +26,7 @@ def get_llm_client() -> LLMClient:
 
     raise ValueError(
         f"Unknown LLM provider: '{provider}'. "
-        f"Supported: gemini, openai, groq"
+        f"Supported: groq, gemini, ollama"
     )
 
 
