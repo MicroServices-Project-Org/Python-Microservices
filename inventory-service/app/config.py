@@ -11,6 +11,11 @@ class Settings(BaseSettings):
     POSTGRES_PORT: int = 5433
     POSTGRES_DB: str = "inventory_db"
 
+    # Kafka: order-cancelled events restock the cancelled items
+    KAFKA_BOOTSTRAP_SERVERS: str = "localhost:9092"
+    KAFKA_ORDER_CANCELLED_TOPIC: str = "order-cancelled"
+    KAFKA_GROUP_ID: str = "inventory-group"
+
     @property
     def DATABASE_URL(self) -> str:
         return (
