@@ -17,7 +17,7 @@ Open bugs and code/doc mismatches come first, then fixed issues, then the infras
 | 2 | Duplicate `ReconciliationJob` in Search Service ran every sync twice | #25 |
 | 3 | Broken links in the README's "Service Documentation" table | #24 |
 | 4 | AI Service defaulted to Gemini instead of Groq, and `factory.py` listed an OpenAI provider that didn't exist | #22 |
-| 5 | Unit tests read the developer's local `.env` (e.g. `AUTH_ENABLED=true` failed 21 gateway tests). Fixed by `tests/conftest.py` in each service | TBD |
+| 5 | Unit tests read the developer's local `.env` (e.g. `AUTH_ENABLED=true` failed 21 gateway tests). Fixed by `tests/conftest.py` in each service | #27 |
 | — | Keycloak healthcheck never passed (no `curl` in image, wrong port, health endpoints disabled) | #26 |
 
 ---
