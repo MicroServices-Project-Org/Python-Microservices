@@ -516,7 +516,7 @@ Every service exposes Prometheus-format metrics. Prometheus scrapes them every 1
 | Service Status | UP/DOWN per service from `up{}` |
 | Service Logs | Live JSON-parsed log entries (Loki) |
 
-**Networking note:** Services run on the host, not in Docker, so Prometheus scrapes them via `host.docker.internal:<port>`.
+**Networking note:** Prometheus scrapes every service via `host.docker.internal:<port>`. That works in both modes, because the containers publish the same ports on the host.
 
 ### 2. Logs
 
@@ -720,8 +720,18 @@ done
 docker-compose up -d
 ```
 
-### Step 2 — Start Services (each in a separate terminal)
+### Step 2 — Start the Services
 
+**Option A — everything in Docker (one command):**
+```bash
+docker compose --profile apps up -d --build   # infrastructure + all 7 services
+docker compose --profile apps ps              # wait until the services show (healthy)
+docker compose logs -f order-service          # follow one service's logs
+docker compose --profile apps down            # stop everything (keeps data volumes)
+```
+The app services are in the `apps` profile, so plain `docker compose up -d` still starts only the infrastructure. (Add `COMPOSE_PROFILES=apps` to the root `.env` if you want plain `up -d` to start everything.) Containers still load `<service>/.env` for secrets and flags (`GROQ_API_KEY`, `SMTP_*`, `AUTH_ENABLED`, ...), but `docker-compose.yml` overrides every hostname and port with container-network addresses, and takes the Postgres/Mongo credentials from the root `.env`. After changing code, rebuild just that service: `docker compose up -d --build order-service`.
+
+**Option B — services on the host (for debugging one service):**
 ```bash
 # Terminal 1: Product Service
 cd product-service && source venv/bin/activate
@@ -752,10 +762,12 @@ cd api-gateway && source venv/bin/activate
 python -m uvicorn app.main:app --port 9000 --loop asyncio
 ```
 
+Don't mix the two for the same service: both use the same host ports. Containers call each other by container name (`http://inventory-service:8003`), so a containerized gateway can't reach a service you run on the host instead.
+
 Each Python service logs two init lines on startup:
 ```
 "Logging initialized for <service>"
-"Tracing initialized for <service> → http://localhost:4317"
+"Tracing initialized for <service> → http://localhost:4317"   (http://tempo:4317 in Docker)
 ```
 
 ### Step 3 — Generate traffic
@@ -815,7 +827,7 @@ A `POST /api/orders` produces ~18 spans across api-gateway, order-service, and i
 | Issue | Root Cause | Fix |
 |---|---|---|
 | Anaconda interfering with async event loop | venv inherited Anaconda's sys.path | Removed Anaconda, used Homebrew Python |
-| MongoDB auth failing from host to Docker | SCRAM auth broken over Docker TCP bridge on Mac | Disabled auth for local dev |
+| MongoDB auth failing from host to Docker | A Homebrew `mongod` (no auth) was listening on `localhost:27017` and shadowed the Docker port, so the host services were talking to it, not to Docker's MongoDB | Host mode still uses no auth. In Docker, product-service logs in with the root user (`MONGO_USERNAME`/`MONGO_PASSWORD`) |
 | `motor` + `pymongo` version incompatibility | Motor relied on removed PyMongo internals | Pinned compatible versions |
 | PostgreSQL init script not running | Data volume already initialized | `docker-compose down -v` to reset |
 | Port conflicts on Mac (8080, 5432) | Local processes occupying ports | Remapped to 8081, 5433 |

@@ -20,19 +20,22 @@ Python services use the same layout: `app/main.py` (FastAPI app + `lifespan`), `
 
 ## Running
 
-**`docker-compose.yml` starts infrastructure only** (Mongo, Postgres on host port **5433**, Kafka on 9092, Redis, Elasticsearch, Keycloak on 8081, Prometheus, Grafana, Loki, Tempo, Promtail). The application services run on the host. Their Dockerfiles exist but compose does not use them.
+`docker compose up -d` starts **infrastructure only** (Mongo, Postgres on host port **5433**, Kafka on 9092, Redis, Elasticsearch, Keycloak on 8081, Prometheus, Grafana, Loki, Tempo, Promtail). The 7 app services are in the compose profile **`apps`**, so there are two ways to run them:
 
 ```bash
-docker-compose up -d
+# A: everything in Docker
+docker compose --profile apps up -d --build
+docker compose up -d --build order-service      # rebuild one after a code change
+docker compose --profile apps down
 
-# each Python service, in its own terminal
+# B: services on the host (one terminal each), infrastructure in Docker
+docker compose up -d
 cd <service> && source venv/bin/activate
 python -m uvicorn app.main:app --port <port> --loop asyncio
-
 cd search-service && mvn spring-boot:run
 ```
 
-Because the services run on the host, Prometheus scrapes them at `host.docker.internal:<port>` (`docker/prometheus/prometheus.yml`), and Promtail tails the JSON log files in `./logs/`. Keep both in mind if you containerize a service.
+Both modes publish the same host ports, so run a given service one way at a time. In Docker, a service loads its `<service>/.env` (`env_file`, optional) for secrets and flags, but `docker-compose.yml` overrides every host-specific value in `environment:` (Kafka `kafka:29092`, Postgres `postgres:5432`, `mongodb`, `redis`, `tempo:4317`, `http://<service>:<port>` URLs), and Postgres/Mongo credentials come from the root `.env`. **If you add a setting that points at `localhost`, add its container override there too.** The gateway checks tokens against `KEYCLOAK_URL=http://localhost:8081` (the issuer clients see) but fetches signing keys from `KEYCLOAK_INTERNAL_URL=http://keycloak:8080`. Containers bind-mount `./logs` at `/logs` (`LOG_DIR`), so Promtail ships the same files in both modes, and Prometheus scrapes `host.docker.internal:<port>` (`docker/prometheus/prometheus.yml`), which reaches either mode. Images are multi-stage and non-root, and search builds its jar inside the image. CI (`docker-validate.yml`) builds all 7 images from a clean checkout.
 
 **Config:** each Python service reads its own `<service>/.env` (gitignored), and the root `.env` is read only by `docker-compose.yml`. Each has a committed `.env.example` with every key, using default values or `your-*` placeholders for secrets. `Settings` forbids unknown keys, so a stale key in `.env` crashes startup. **If you add, rename, or remove a `Settings` field, update that service's `.env.example` too.** `tests/unit/test_env_example.py` fails CI if they drift.
 
@@ -82,7 +85,7 @@ mvn test -Dtest=DiffReconcileJobTest
 ## Gotchas
 
 - Postgres runs on host port **5433**, not 5432. A single container hosts both `order_db` and `inventory_db`, created by `docker/postgres/init-multiple-dbs.sh`.
-- MongoDB is reached without auth from the host (`product-service/app/database.py`) even though compose sets root credentials. This was done on purpose to work around SCRAM auth failing over the Docker bridge on macOS.
+- **A Homebrew `mongod` may shadow Docker's MongoDB.** If `brew services` runs `mongodb-community` on `localhost:27017`, host-mode product-service connects to it (no auth) instead of the `mongodb` container. That is where the old "SCRAM auth fails over the Docker bridge" belief came from. In Docker mode, product-service uses the `mongodb` container with the root user (`MONGO_USERNAME`/`MONGO_PASSWORD`, empty = no auth). The two databases hold separate catalogs, and Search's reconcile job syncs Elasticsearch to whichever product-service is running. Check with `lsof -iTCP:27017 -sTCP:LISTEN`.
 - Tables are created by `Base.metadata.create_all` in `lifespan`. There are no migrations, so a schema change on an existing table needs a manual `ALTER` or a dropped volume.
 - Use Homebrew Python 3.12, not Anaconda (it breaks the asyncio loop). Search needs Java 21 exactly, because Mockito/Byte Buddy fails on newer JDKs.
 - Per-service doc filenames aren't uniform (`ai-service/ai-docs.md`, `api-gateway/gw-docs.md`). Use the README's "Service Documentation" table as the index, and update it if you add or rename a doc. Notification has no doc yet.

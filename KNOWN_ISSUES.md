@@ -46,19 +46,19 @@ Do these in order. Each step depends on the ones before it. The status of each w
 - [ ] **Kafka/Zookeeper:** no volumes, so topics and consumer offsets are lost on restart. Undelivered events are safe because of the outbox, but consumers with `auto-offset-reset: earliest` will replay messages.
 - [ ] If you add volumes, also add them to `REQUIRED_VOLUMES` in `.github/workflows/docker-validate.yml`.
 
-## TODO 2 — All 7 app services in Docker Compose · *not started*
+## TODO 2 — All 7 app services in Docker Compose · *done (#40)*
 
-**Status:** compose only defines infrastructure. Every service has a Dockerfile, but they have the problems below.
+**Status:** `docker compose --profile apps up -d --build` runs infrastructure plus all 7 services. Plain `docker compose up -d` is still infrastructure only, for running services on the host. See the README's "Running the Application".
 
-**Blockers found:**
-- [x] **No `.dockerignore` anywhere.** Fixed in #23: each Python service now has a `.dockerignore` excluding `.env*`, `venv/`, `tests/`, and caches. Still worth switching `api-gateway`, `notification-service`, and `ai-service` from `COPY . .` to the multi-stage `COPY app/ ./app/` pattern for consistency.
-- [ ] **The search-service Dockerfile needs a prebuilt jar** (`COPY target/search-service-1.0.0.jar`). `docker compose build` fails on a clean checkout. Convert it to a multi-stage Maven build.
-- [ ] **Hostnames:** every `config.py` and `application.yml` defaults to `localhost`. Set env overrides in compose, e.g. `MONGO_HOST=mongodb`, `POSTGRES_HOST=postgres`, `POSTGRES_PORT=5432` (internal port, not 5433), `KAFKA_BOOTSTRAP_SERVERS=kafka:29092` (internal listener), `REDIS_HOST=redis`, service URLs such as `http://inventory-service:8003`, `OTLP_ENDPOINT=http://tempo:4317`, and for search `SPRING_ELASTICSEARCH_URIS`, `SPRING_KAFKA_BOOTSTRAP_SERVERS`, and `PRODUCT_SERVICE_URL`.
-- [ ] **Log path:** `logging_config.py` resolves `LOG_DIR` to `/logs` inside the container. Set `LOG_DIR` and mount `./logs`, or drop the file handler in containers and let Promtail read Docker stdout. Promtail's Docker scrape is currently broken (API version 1.42 is too old), so upgrading Promtail may be required.
-- [ ] **Prometheus targets** point at `host.docker.internal:<port>`. Change them to service names, or keep a separate config for host mode.
-- [ ] **Startup ordering:** use `depends_on: condition: service_healthy` on Postgres, Mongo, Kafka, and Keycloak. The Keycloak healthcheck works now (#26).
-- [ ] **Secrets:** pass `GROQ_API_KEY` and SMTP credentials from the root `.env` or an `env_file:`. Don't bake them into images.
-- [ ] Add the app services to `REQUIRED_SERVICES` in `docker-validate.yml`.
+- [x] `.dockerignore` for every service (#23; search's added in #40). All Dockerfiles now use the same multi-stage, non-root layout with a healthcheck.
+- [x] search-service builds its jar inside the image (multi-stage Maven), so a clean checkout builds.
+- [x] Hostnames: container-network overrides in each service's `environment:` in `docker-compose.yml`, which win over the `<service>/.env` the container also loads. The gateway got `KEYCLOAK_INTERNAL_URL` for fetching signing keys, because the token issuer stays `http://localhost:8081`.
+- [x] MongoDB auth: product-service got optional `MONGO_USERNAME`/`MONGO_PASSWORD`, and compose passes the root user. (The old "SCRAM fails over the Docker bridge" issue was a Homebrew `mongod` shadowing port 27017. See the CLAUDE.md Gotchas.)
+- [x] Log path: containers set `LOG_DIR=/logs` and bind-mount `./logs`, so Promtail's existing file job ships them. Promtail's Docker scrape job is still broken (API 1.42). Leave it that way, or you'd get duplicate logs once it works.
+- [x] Prometheus keeps scraping `host.docker.internal:<port>`, which works in both modes because the ports are published. Added `extra_hosts: host-gateway` for Linux.
+- [x] Startup ordering: `depends_on: condition: service_healthy` on Mongo, Postgres, Kafka, Redis, and Elasticsearch.
+- [x] Secrets come from the optional `env_file: <service>/.env`. Nothing is baked into images (`.dockerignore` excludes `.env*`).
+- [x] `docker-validate.yml` checks the app services are defined and builds all 7 images.
 
 ## TODO 3 — OpenTelemetry on Search Service (Java) · *not started*
 

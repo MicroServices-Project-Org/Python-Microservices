@@ -216,9 +216,13 @@ PRODUCT_SERVICE_URL=http://localhost:8001
 ORDER_SERVICE_URL=http://localhost:8002
 INVENTORY_SERVICE_URL=http://localhost:8003
 AI_SERVICE_URL=http://localhost:8005
+SEARCH_SERVICE_URL=http://localhost:8006
 
-# Keycloak
+# Keycloak. KEYCLOAK_URL is the public URL and must match the token's `iss`.
+# KEYCLOAK_INTERNAL_URL (optional) is where signing keys are fetched;
+# docker-compose sets it to http://keycloak:8080.
 KEYCLOAK_URL=http://localhost:8081
+KEYCLOAK_INTERNAL_URL=
 KEYCLOAK_REALM=microservices
 KEYCLOAK_CLIENT_ID=api-gateway
 

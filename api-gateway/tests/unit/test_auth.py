@@ -155,3 +155,16 @@ async def test_auth_enabled_invalid_issuer_raises_401(mock_settings, mock_decode
         await verify_token(request)
     assert exc.value.status_code == 401
     assert "issuer" in exc.value.detail.lower()
+
+def test_jwks_url_defaults_to_keycloak_url():
+    from app.config import Settings
+    s = Settings(_env_file=None, KEYCLOAK_URL="http://localhost:8081")
+    assert s.KEYCLOAK_JWKS_URL == "http://localhost:8081/realms/microservices/protocol/openid-connect/certs"
+    assert s.KEYCLOAK_ISSUER == "http://localhost:8081/realms/microservices"
+
+
+def test_internal_url_changes_jwks_url_but_not_issuer():
+    from app.config import Settings
+    s = Settings(_env_file=None, KEYCLOAK_URL="http://localhost:8081", KEYCLOAK_INTERNAL_URL="http://keycloak:8080")
+    assert s.KEYCLOAK_JWKS_URL == "http://keycloak:8080/realms/microservices/protocol/openid-connect/certs"
+    assert s.KEYCLOAK_ISSUER == "http://localhost:8081/realms/microservices"

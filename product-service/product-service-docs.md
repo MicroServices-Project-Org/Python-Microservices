@@ -94,6 +94,8 @@ Two separate issues combined:
 **Fix:**
 Removed MongoDB authentication entirely for local development by removing the `MONGO_INITDB_ROOT_USERNAME` and `MONGO_INITDB_ROOT_PASSWORD` environment variables from `docker-compose.yml`. This is the standard industry practice for local development environments — MongoDB only accepts connections from localhost, so there is no security risk. Authentication will be properly configured in the containerized deployment in Phase 7 where all services communicate over Docker's internal network.
 
+**Update (#40), the actual cause:** a Homebrew MongoDB 6.0 (`brew services` → `mongodb-community@6.0`) was listening on `localhost:27017` and shadowing the Docker port. That's the "6.0.22 instead of 7.0" above, and it's why unauthenticated connections from the host work: they reach Homebrew's `mongod`, not the container. Compose still sets root credentials, and from inside Docker product-service authenticates fine with them (`MONGO_USERNAME`/`MONGO_PASSWORD`, set by `docker-compose.yml`). Leave them empty to connect without auth.
+
 ---
 
 ### Issue 3 — motor and pymongo Version Incompatibility
@@ -207,6 +209,8 @@ APP_NAME=product-service
 APP_PORT=8001
 MONGO_HOST=127.0.0.1
 MONGO_PORT=27017
+MONGO_USERNAME=          # empty = no auth (host mode); docker-compose sets the root user
+MONGO_PASSWORD=
 DB_NAME=product_db
 ```
 
