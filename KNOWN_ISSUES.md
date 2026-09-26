@@ -10,13 +10,6 @@ Open bugs and code/doc mismatches come first, then fixed issues, then the infras
 - **Problem:** The README describes `ai-service/app/cache/redis_cache.py`: a cache-aside layer on Redis DB 1 with a 6h TTL for LLM product IDs, a 15min TTL for catalog data, and a graceful fallback. That module doesn't exist, and nothing in `ai-service/app` imports or uses Redis. `git log -S redis_cache` finds no commit that ever added it.
 - **Fix:** Implement the cache (and add `redis` to `ai-service/requirements.txt`), or remove the claims from the README.
 
-## 5. Unit tests depend on the developer's local `.env`
-
-- **Where:** all Python services. `app/config.py` loads `.env` when imported, and tests import `app.*`.
-- **Problem:** tests run with whatever is in your local `.env`. With `AUTH_ENABLED=true` in `api-gateway/.env` (as used for the Keycloak flow test), 21 of 34 gateway tests fail with `401`. CI has no `.env`, so it stays green, and a local run can look like a regression when it isn't.
-- **Workaround:** `AUTH_ENABLED=false pytest`.
-- **Fix:** add a `tests/conftest.py` that isolates settings, e.g. by setting the env vars tests rely on, or by patching `settings` to known values, so results don't depend on the local `.env`.
-
 # Fixed Issues
 
 | # | Issue | PR |
@@ -24,6 +17,7 @@ Open bugs and code/doc mismatches come first, then fixed issues, then the infras
 | 2 | Duplicate `ReconciliationJob` in Search Service ran every sync twice | #25 |
 | 3 | Broken links in the README's "Service Documentation" table | #24 |
 | 4 | AI Service defaulted to Gemini instead of Groq, and `factory.py` listed an OpenAI provider that didn't exist | #22 |
+| 5 | Unit tests read the developer's local `.env` (e.g. `AUTH_ENABLED=true` failed 21 gateway tests). Fixed by `tests/conftest.py` in each service | TBD |
 | — | Keycloak healthcheck never passed (no `curl` in image, wrong port, health endpoints disabled) | #26 |
 
 ---
