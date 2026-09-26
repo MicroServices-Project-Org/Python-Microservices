@@ -1,4 +1,5 @@
 import logging
+import logging.handlers
 import os
 import sys
 import threading
@@ -10,6 +11,12 @@ from pythonjsonlogger import jsonlogger
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 LOG_DIR = Path(os.getenv("LOG_DIR", _PROJECT_ROOT / "logs"))
+
+# Size-based rotation caps each service at LOG_MAX_BYTES * (LOG_BACKUP_COUNT + 1) on disk
+# (10 MB x 4 = 40 MB by default). Promtail only tails *.log, so rotated .log.1 .. .log.N
+# files aren't shipped twice. Without this, a noisy logger grew one file to ~700 MB.
+LOG_MAX_BYTES = int(os.getenv("LOG_MAX_BYTES", 10 * 1024 * 1024))
+LOG_BACKUP_COUNT = int(os.getenv("LOG_BACKUP_COUNT", 3))
 
 # While Kafka is unreachable, aiokafka retries every ~100ms and logs each failure at ERROR,
 # which wrote ~700 MB/service to logs/ during an outage. Keep the first occurrence of each
@@ -66,7 +73,9 @@ def setup_logging(service_name: str, level: str = "INFO") -> None:
 
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     log_path = LOG_DIR / f"{service_name}.log"
-    file_handler = logging.FileHandler(log_path)
+    file_handler = logging.handlers.RotatingFileHandler(
+        log_path, maxBytes=LOG_MAX_BYTES, backupCount=LOG_BACKUP_COUNT, encoding="utf-8"
+    )
     file_handler.setFormatter(formatter)
 
     class ContextFilter(logging.Filter):
