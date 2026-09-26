@@ -38,7 +38,7 @@ product:
   service:
     url: http://localhost:8001
 
-# Bidirectional reconciliation job — safety net for Kafka outages and ES drift
+# Reconciliation job (DiffReconcileJob): Mongo → ES one-way sync, safety net for Kafka outages and ES drift
 reconciliation:
   enabled: true
   interval:
