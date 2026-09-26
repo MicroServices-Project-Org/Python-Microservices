@@ -16,6 +16,11 @@ class Settings(BaseSettings):
     KEYCLOAK_URL: str = "http://localhost:8081"
     KEYCLOAK_REALM: str = "microservices"
     KEYCLOAK_CLIENT_ID: str = "api-gateway"
+    # Where the gateway fetches signing keys, if different from KEYCLOAK_URL.
+    # In Docker the gateway reaches Keycloak at http://keycloak:8080, but tokens
+    # are issued via http://localhost:8081, so KEYCLOAK_URL must stay the public
+    # URL (it's checked against the token's `iss`).
+    KEYCLOAK_INTERNAL_URL: str = ""
 
     # Rate limiting
     RATE_LIMIT_DEFAULT: str = "60/minute"
@@ -26,7 +31,8 @@ class Settings(BaseSettings):
 
     @property
     def KEYCLOAK_JWKS_URL(self) -> str:
-        return f"{self.KEYCLOAK_URL}/realms/{self.KEYCLOAK_REALM}/protocol/openid-connect/certs"
+        base = self.KEYCLOAK_INTERNAL_URL or self.KEYCLOAK_URL
+        return f"{base}/realms/{self.KEYCLOAK_REALM}/protocol/openid-connect/certs"
 
     @property
     def KEYCLOAK_ISSUER(self) -> str:

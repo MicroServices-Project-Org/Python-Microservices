@@ -18,6 +18,32 @@ volumes:
   loki_data:
   tempo_data:
 
+# ─────────────────────────────────────────────
+# Shared settings for the app services (profile "apps")
+# `docker compose up -d` starts infrastructure only;
+# `docker compose --profile apps up -d --build` starts everything.
+# ─────────────────────────────────────────────
+x-app: &app
+  profiles: ["apps"]
+  restart: unless-stopped
+  networks:
+    - microservices-net
+  volumes:
+    - ./logs:/logs   # same JSON log files Promtail already tails
+
+# Container-network addresses. These override anything in <service>/.env,
+# which is still loaded for secrets (GROQ_API_KEY, SMTP_*, AUTH_ENABLED, ...).
+x-app-env: &app-env
+  LOG_DIR: /logs
+  OTLP_ENDPOINT: http://tempo:4317
+  KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+
+x-postgres-env: &postgres-env
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: "5432"   # container port, not the host's 5433
+  POSTGRES_USER: ${POSTGRES_USER:-admin}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+
 services:
 
   # ───────────────────────────────────────────
@@ -169,6 +195,8 @@ services:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
       - "--web.enable-lifecycle"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # scrape targets; Linux needs this, Docker Desktop has it
     networks:
       - microservices-net
 
@@ -274,3 +302,153 @@ services:
       interval: 15s
       timeout: 10s
       retries: 5
+
+  # ───────────────────────────────────────────
+  # APP SERVICES (profile "apps")
+  # ───────────────────────────────────────────
+
+  product-service:
+    <<: *app
+    build: ./product-service
+    container_name: product-service
+    ports:
+      - "8001:8001"
+    env_file:
+      - path: ./product-service/.env
+        required: false
+    environment:
+      <<: *app-env
+      MONGO_HOST: mongodb
+      MONGO_PORT: "27017"
+      MONGO_USERNAME: ${MONGO_USERNAME:-admin}   # same root user the mongodb container is created with
+      MONGO_PASSWORD: ${MONGO_PASSWORD:-password}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  inventory-service:
+    <<: *app
+    build: ./inventory-service
+    container_name: inventory-service
+    ports:
+      - "8003:8003"
+    env_file:
+      - path: ./inventory-service/.env
+        required: false
+    environment:
+      <<: [*app-env, *postgres-env]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  order-service:
+    <<: *app
+    build: ./order-service
+    container_name: order-service
+    ports:
+      - "8002:8002"
+    env_file:
+      - path: ./order-service/.env
+        required: false
+    environment:
+      <<: [*app-env, *postgres-env]
+      INVENTORY_SERVICE_URL: http://inventory-service:8003
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      inventory-service:
+        condition: service_started
+
+  notification-service:
+    <<: *app
+    build: ./notification-service
+    container_name: notification-service
+    ports:
+      - "8004:8004"
+    env_file:
+      - path: ./notification-service/.env
+        required: false
+    environment:
+      <<: *app-env
+      REDIS_HOST: redis
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  ai-service:
+    <<: *app
+    build: ./ai-service
+    container_name: ai-service
+    ports:
+      - "8005:8005"
+    env_file:
+      - path: ./ai-service/.env
+        required: false
+    environment:
+      <<: *app-env
+      REDIS_HOST: redis
+      PRODUCT_SERVICE_URL: http://product-service:8001
+      OLLAMA_BASE_URL: http://host.docker.internal:11434   # only used with LLM_PROVIDER=ollama
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # Linux; Docker Desktop defines it already
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      product-service:
+        condition: service_started
+
+  search-service:
+    <<: *app
+    build: ./search-service
+    container_name: search-service
+    ports:
+      - "8006:8006"
+    volumes: []   # logs to stdout only (no log file), same as on the host
+    environment:
+      SPRING_ELASTICSEARCH_URIS: http://elasticsearch:9200
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      PRODUCT_SERVICE_URL: http://product-service:8001
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      product-service:
+        condition: service_started
+
+  api-gateway:
+    <<: *app
+    build: ./api-gateway
+    container_name: api-gateway
+    ports:
+      - "9000:9000"
+    env_file:
+      - path: ./api-gateway/.env
+        required: false
+    environment:
+      <<: *app-env
+      PRODUCT_SERVICE_URL: http://product-service:8001
+      ORDER_SERVICE_URL: http://order-service:8002
+      INVENTORY_SERVICE_URL: http://inventory-service:8003
+      AI_SERVICE_URL: http://ai-service:8005
+      SEARCH_SERVICE_URL: http://search-service:8006
+      # Tokens are issued via the host URL, so the issuer check must use it;
+      # signing keys are fetched over the container network.
+      KEYCLOAK_URL: http://localhost:8081
+      KEYCLOAK_INTERNAL_URL: http://keycloak:8080
+    depends_on:
+      - product-service
+      - order-service
+      - inventory-service
+      - ai-service
+      - search-service

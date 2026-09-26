@@ -8,9 +8,13 @@ class Database:
 db_instance = Database()
 
 async def connect_db():
+    auth = {}
+    if settings.MONGO_USERNAME:
+        auth = {"username": settings.MONGO_USERNAME, "password": settings.MONGO_PASSWORD, "authSource": "admin"}
     db_instance.client = AsyncIOMotorClient(
         host=settings.MONGO_HOST,
-        port=settings.MONGO_PORT
+        port=settings.MONGO_PORT,
+        **auth,
     )
     db_instance.db = db_instance.client[settings.DB_NAME]
     print(f"✅ Connected to MongoDB: {settings.DB_NAME}")

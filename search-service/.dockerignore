@@ -1,0 +1,6 @@
+# Keep build output and local artifacts out of the build context
+target/
+.idea/
+.vscode/
+*.iml
+*.md
