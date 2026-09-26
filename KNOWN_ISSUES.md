@@ -14,7 +14,9 @@ The first part lists places where the code and the docs disagree, found while wr
 - **Problem:** `ReconciliationJob` and `DiffReconcileJob` are both `@Component`s. Each has `@Scheduled(fixedDelayString = "${reconciliation.interval.ms:1800000}")` and is gated by the same `reconciliation.enabled` flag, so both run every cycle. That means twice the reads from Product Service and Elasticsearch, and two jobs writing to ES at the same time. Only `DiffReconcileJob` has tests (`DiffReconcileJobTest`), and the README mentions only `DiffReconcileJob`.
 - **Fix:** Delete `ReconciliationJob.java` if it's superseded, or give it its own enable flag.
 
-## 3. Broken README links in "Service Documentation"
+## 3. Broken README links in "Service Documentation" · ✅ fixed 2026-09-26
+
+> Links now point to `ai-docs.md` and `gw-docs.md`. The search doc was renamed to `search-service/search-service-docs.md`. The notification row says there's no doc yet, and the Order row also links `resilience-docs.md`. A repo-wide check finds no broken relative `.md` links.
 
 - **Where:** `README.md` → "📝 Service Documentation" table
 - **Problem:** Several links point to files that don't exist:

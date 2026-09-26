@@ -83,5 +83,5 @@ mvn test -Dtest=DiffReconcileJobTest
 - MongoDB is reached without auth from the host (`product-service/app/database.py`) even though compose sets root credentials. This was done on purpose to work around SCRAM auth failing over the Docker bridge on macOS.
 - Tables are created by `Base.metadata.create_all` in `lifespan`. There are no migrations, so a schema change on an existing table needs a manual `ALTER` or a dropped volume.
 - Use Homebrew Python 3.12, not Anaconda (it breaks the asyncio loop). Search needs Java 21 exactly, because Mockito/Byte Buddy fails on newer JDKs.
-- Some doc links in `README.md` point to filenames that differ from the actual ones (e.g. the real file is `ai-service/ai-docs.md`, and the search doc is `search-service/serarch-services-documentation.md`).
+- Per-service doc filenames aren't uniform (`ai-service/ai-docs.md`, `api-gateway/gw-docs.md`). Use the README's "Service Documentation" table as the index, and update it if you add or rename a doc. Notification has no doc yet.
 - `KNOWN_ISSUES.md` lists open mismatches between the code and the docs. Update it when you fix one.
