@@ -1,8 +1,9 @@
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from app.database import connect_db, close_db
 from app.routes.product_routes import router as product_router
-from app.kafka.producer import start_producer, stop_producer
+from app.kafka.producer import start_producer, stop_producer, retry_producer_until_started
 from prometheus_fastapi_instrumentator import Instrumentator
 from app.logging_config import setup_logging
 from app.tracing_config import setup_tracing
@@ -12,8 +13,14 @@ setup_logging("product-service")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await connect_db()
-    await start_producer()
+    # Don't fail startup if Kafka is down: publish_event skips events until the producer
+    # starts, and Search Service's reconcile job repairs anything missed
+    retry_task = None
+    if not await start_producer():
+        retry_task = asyncio.create_task(retry_producer_until_started())
     yield
+    if retry_task:
+        retry_task.cancel()
     await stop_producer()
     await close_db()
 

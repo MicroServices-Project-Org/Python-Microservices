@@ -24,7 +24,7 @@ async def lifespan(app: FastAPI):
     try:
         await start_producer()
     except Exception as e:
-        print(f"⚠️  Kafka unavailable — outbox worker will retry when Kafka is back: {e}")
+        print(f"⚠️  Kafka unavailable — outbox worker will start the producer when Kafka is back: {e}")
 
     # Start outbox worker as background task
     outbox_task = asyncio.create_task(start_outbox_worker())

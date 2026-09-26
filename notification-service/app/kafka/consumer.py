@@ -1,4 +1,6 @@
+import asyncio
 import json
+import logging
 import redis.asyncio as redis
 from aiokafka import AIOKafkaConsumer
 from app.config import settings
@@ -8,6 +10,11 @@ from app.services.email_service import (
     build_order_cancelled_email,
     build_inventory_low_email,
 )
+
+logger = logging.getLogger(__name__)
+
+# Seconds to wait before reconnecting after the consumer fails (e.g. Kafka down at startup)
+RETRY_SECONDS = 10
 
 # Redis client for idempotency checks
 _redis: redis.Redis | None = None
@@ -48,9 +55,27 @@ async def _is_duplicate(event_key: str) -> bool:
 
 async def start_consumer():
     """
-    Starts the Kafka consumer, subscribes to all 4 topics,
-    and routes each event to the appropriate handler.
+    Runs the Kafka consumer until the task is cancelled. If Kafka is unreachable
+    (at startup or later), it retries every RETRY_SECONDS instead of exiting,
+    so the service recovers on its own when Kafka comes back.
     """
+    try:
+        while True:
+            try:
+                await _consume()
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error("Kafka consumer failed, retrying in %ss: %s", RETRY_SECONDS, e)
+            await asyncio.sleep(RETRY_SECONDS)
+    finally:
+        # Close Redis connection
+        if _redis:
+            await _redis.aclose()
+
+
+async def _consume():
+    """Subscribes to all 4 topics and routes each event to the appropriate handler."""
     consumer = AIOKafkaConsumer(
         settings.KAFKA_ORDER_PLACED_TOPIC,
         settings.KAFKA_ORDER_CANCELLED_TOPIC,
@@ -78,14 +103,8 @@ async def start_consumer():
                 await _handle_message(msg.topic, msg.value)
             except Exception as e:
                 print(f"❌ Error processing message from {msg.topic}: {e}")
-
-    except Exception as e:
-        print(f"❌ Kafka consumer error: {e}")
     finally:
         await consumer.stop()
-        # Close Redis connection
-        if _redis:
-            await _redis.aclose()
 
 
 async def _handle_message(topic: str, event: dict):

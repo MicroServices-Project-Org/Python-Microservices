@@ -1,12 +1,34 @@
 import json
 import asyncio
+import logging
 from aiokafka import AIOKafkaConsumer
 from app.config import settings
 from app.services.notification_ai import personalize_notification
 from app.kafka.producer import publish_ai_notification
 
+logger = logging.getLogger(__name__)
+
+# Seconds to wait before reconnecting after the consumer fails (e.g. Kafka down at startup)
+RETRY_SECONDS = 10
+
 
 async def start_consumer():
+    """
+    Runs the order-placed consumer until the task is cancelled. If Kafka is
+    unreachable (at startup or later), it retries every RETRY_SECONDS instead of
+    exiting, so the service recovers on its own when Kafka comes back.
+    """
+    while True:
+        try:
+            await _consume()
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.error("AI Kafka consumer failed, retrying in %ss: %s", RETRY_SECONDS, e)
+        await asyncio.sleep(RETRY_SECONDS)
+
+
+async def _consume():
     """
     Consumes order-placed events, generates personalized email content
     via LLM, and publishes the result to ai-notification-ready topic.
@@ -31,9 +53,6 @@ async def start_consumer():
                 await asyncio.sleep(5)
             except Exception as e:
                 print(f"❌ Error processing order-placed event: {e}")
-
-    except Exception as e:
-        print(f"❌ AI Kafka consumer error: {e}")
     finally:
         await consumer.stop()
 

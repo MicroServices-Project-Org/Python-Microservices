@@ -62,3 +62,17 @@ async def test_handle_order_placed_preserves_customer_info(mock_personalize, moc
     published = mock_publish.call_args[0][0]
     assert published["customer_email"] == "other@test.com"
     assert published["customer_name"] == "Jane"
+
+# ─── start_consumer resilience ───────────────────────────────────────────────
+
+@pytest.mark.asyncio
+@patch("app.kafka.consumer.asyncio.sleep", new_callable=AsyncMock)
+@patch("app.kafka.consumer._consume", new_callable=AsyncMock)
+async def test_start_consumer_retries_after_kafka_failure(mock_consume, mock_sleep):
+    import asyncio
+    from app.kafka.consumer import start_consumer, RETRY_SECONDS
+    mock_consume.side_effect = [ConnectionError("Kafka down"), asyncio.CancelledError()]
+    with pytest.raises(asyncio.CancelledError):
+        await start_consumer()
+    assert mock_consume.await_count == 2
+    mock_sleep.assert_awaited_with(RETRY_SECONDS)
