@@ -21,7 +21,10 @@ Llama 3.3 70B is Meta's open-source large language model. It runs on Groq's clou
 All LLM providers are called via `httpx` REST calls rather than provider-specific SDKs (`google-generativeai`, `openai`, `groq`). This keeps dependencies minimal, maintains consistency with the rest of the project (which uses `httpx` for inter-service calls), and makes the provider abstraction cleaner — each client is just an HTTP wrapper.
 
 ### Real Product Data from Product Service
-The AI Service calls the Product Service (`GET /api/products`) to fetch the real catalog before every LLM call. This means recommendations, search results, and chatbot responses reference actual products in the system rather than hallucinated ones. The product data is formatted into a text block and injected into the LLM's system prompt.
+The AI Service calls the Product Service (`GET /api/products`) to fetch the real catalog before every LLM call. This means recommendations, search results, and chatbot responses reference actual products in the system rather than hallucinated ones. The product data is formatted into a text block and injected into the LLM's system prompt. `get_all_products()` walks every page of `/api/products` (page_size 100) so the LLM sees the whole catalog, not just the first page.
+
+### Validated LLM Output
+The LLM is asked for JSON, but it can wrap it in markdown fences, add prose, or name products that don't exist. Recommendations and smart search pass every reply through `app/services/llm_output.py`: it extracts the JSON, matches each product name to the catalog (case- and whitespace-insensitive), and drops anything that doesn't match. The response's `id`, `price`, `category`, and `image_url` come from the catalog, never from the LLM; only the reason text comes from the model. If the reply has no valid JSON (including the providers' "temporarily busy" fallback), the endpoint returns **502** instead of a 200 with an error message inside. With an empty catalog, the endpoint returns an empty result and skips the LLM call.
 
 ### Kafka Consumer + Producer
 The AI Service acts as both a Kafka consumer and producer. It consumes `order-placed` events, generates personalized email content via the LLM, and publishes the result to `ai-notification-ready` for the Notification Service to send. This creates a fully asynchronous AI personalization pipeline.
@@ -57,6 +60,7 @@ ai-service/
 │   │   ├── chatbot.py               # Shopping assistant with conversation history
 │   │   ├── recommendation.py        # Product recommendations from real catalog
 │   │   ├── suggestion.py            # Natural language product search
+│   │   ├── llm_output.py            # Parse LLM JSON, match picks to real catalog products
 │   │   └── notification_ai.py       # Personalized email generation for orders
 │   └── kafka/
 │       ├── __init__.py
@@ -66,9 +70,12 @@ ai-service/
 │   ├── __init__.py
 │   └── unit/
 │       ├── __init__.py
-│       ├── test_llm_clients.py      # 14 tests — all 3 LLM providers
-│       ├── test_ai_services.py      # 17 tests — chatbot, recommendations, suggestion, notification
-│       ├── test_product_client.py   # 10 tests — product fetching and formatting
+│       ├── test_llm_clients.py      # 13 tests — all 3 LLM providers
+│       ├── test_ai_services.py      # 20 tests — chatbot, recommendations, suggestion, notification
+│       ├── test_llm_output.py       # 13 tests — JSON parsing and catalog matching
+│       ├── test_ai_routes.py        # 3 tests — response shapes and 502 on invalid LLM output
+│       ├── test_product_client.py   # 13 tests — product fetching, pagination, and formatting
+│       ├── test_env_example.py      # 3 tests — .env.example matches Settings
 │       └── test_kafka.py            # 3 tests — order-placed handler
 ├── pytest.ini
 ├── Dockerfile
@@ -151,7 +158,18 @@ LLM_PROVIDER=ollama    # Ollama (local, no API key)
 | **Endpoint** | `GET /api/ai/recommendations?product_name=iPhone&category=Electronics` |
 | **Trigger** | REST call |
 | **Input** | Product name and/or category |
-| **Output** | JSON with 5 recommended products from real catalog |
+| **Output** | Up to 5 recommended catalog products (unknown names dropped) |
+
+```json
+// Response
+{
+  "recommendations": [
+    { "id": "6a2203b5...", "name": "Samsung Galaxy S24", "price": 799.99,
+      "category": "Electronics", "image_url": null,
+      "reason": "Similar Android flagship with comparable price point" }
+  ]
+}
+```
 
 ### 3. Smart Search (Natural Language)
 | | |
@@ -166,7 +184,14 @@ LLM_PROVIDER=ollama    # Ollama (local, no API key)
 { "query": "something warm for winter under $50" }
 
 // Response
-{ "result": "{\"matches\": [...], \"search_tags\": [\"winter\"], ...}" }
+{
+  "matches": [
+    { "id": "6a2203b5...", "name": "Nike Running Shoes", "price": 120.0,
+      "category": "Footwear", "image_url": null, "match_reason": "Built for running, under budget" }
+  ],
+  "search_tags": ["shoes", "running"],
+  "search_category": "Footwear"
+}
 ```
 
 ### 4. Notification Personalization
@@ -276,7 +301,7 @@ A 5-second delay between Kafka messages prevents LLM rate limit exhaustion from 
 
 ## Unit Tests — What's Covered
 
-### `test_llm_clients.py` — 14 tests
+### `test_llm_clients.py` — 13 tests
 
 | Area | Tests |
 |---|---|
@@ -284,20 +309,33 @@ A 5-second delay between Kafka messages prevents LLM rate limit exhaustion from 
 | Groq | Success, system prompt, 500 error fallback, 429 retry + fallback |
 | Ollama | Success, 500 error fallback, connection refused, timeout |
 
-### `test_ai_services.py` — 17 tests
+### `test_ai_services.py` — 20 tests
 
 | Area | Tests |
 |---|---|
 | Chatbot | Returns LLM response, includes product context, empty catalog, passes history, no history |
-| Recommendations | Returns response, includes product name in prompt, includes category, empty catalog |
-| Suggestion | Returns response, includes query in prompt, empty catalog |
+| Recommendations | Returns catalog products, drops hallucinated products, 502 on invalid LLM reply, includes product name in prompt, includes category, empty catalog skips LLM |
+| Suggestion | Returns catalog matches with catalog prices, includes query in prompt, 502 on invalid LLM reply, empty catalog skips LLM |
 | Notification AI | Returns subject + body, includes customer in prompt, malformed response, markdown-fenced JSON, empty catalog |
 
-### `test_product_client.py` — 10 tests
+### `test_llm_output.py` — 13 tests
 
 | Area | Tests |
 |---|---|
-| get_all_products | List response, dict with products key, connection error returns empty |
+| parse_llm_json | Plain JSON, markdown fences, surrounding prose, non-JSON, empty, array, broken JSON |
+| match_products | Catalog fields only, case/whitespace-insensitive, drops unknown/malformed items, dedupes in LLM order, non-list input, first duplicate name wins |
+
+### `test_ai_routes.py` — 3 tests
+
+| Area | Tests |
+|---|---|
+| Routes | Structured recommendations response, structured suggest response, 502 passthrough |
+
+### `test_product_client.py` — 13 tests
+
+| Area | Tests |
+|---|---|
+| get_all_products | List response, dict with products key, walks all pages, connection error returns empty |
 | search_products | List response, error returns empty |
 | format_products | Empty list, single product, no tags, with description, 50-product limit, missing fields, product_name key |
 

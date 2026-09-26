@@ -39,6 +39,27 @@ async def test_get_all_products_dict_with_products_key(mock_client_class):
 
 @pytest.mark.asyncio
 @patch("app.clients.product_client.httpx.AsyncClient")
+async def test_get_all_products_walks_all_pages(mock_client_class):
+    pages = [
+        {"products": [{"name": f"P{i}"} for i in range(100)], "total": 150, "page": 1, "page_size": 100},
+        {"products": [{"name": f"P{i}"} for i in range(100, 150)], "total": 150, "page": 2, "page_size": 100},
+    ]
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(side_effect=[
+        MagicMock(status_code=200, json=MagicMock(return_value=page), raise_for_status=MagicMock())
+        for page in pages
+    ])
+    mock_client_class.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client_class.return_value.__aexit__ = AsyncMock(return_value=False)
+
+    result = await get_all_products()
+    assert len(result) == 150
+    assert mock_client.get.call_count == 2
+    assert mock_client.get.call_args_list[0].kwargs["params"] == {"page": 1, "page_size": 100}
+    assert mock_client.get.call_args_list[1].kwargs["params"] == {"page": 2, "page_size": 100}
+
+@pytest.mark.asyncio
+@patch("app.clients.product_client.httpx.AsyncClient")
 async def test_get_all_products_connection_error_returns_empty(mock_client_class):
     import httpx
     mock_client = AsyncMock()

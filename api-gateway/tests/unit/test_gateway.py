@@ -163,7 +163,7 @@ async def test_proxy_ai_recommendations(mock_client, client):
 @patch("app.main.http_client")
 async def test_proxy_ai_suggest(mock_client, client):
     mock_client.request = AsyncMock(return_value=make_downstream_response(
-        content=b'{"result": "{}"}',
+        content=b'{"matches": [], "search_tags": [], "search_category": null}',
     ))
     resp = await client.post("/api/ai/suggest", json={"query": "birthday gift"})
     assert resp.status_code == 200

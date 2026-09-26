@@ -193,7 +193,7 @@ Python-Microservices/
 │   │   ├── routes/ai_routes.py
 │   │   ├── services/
 │   │   └── kafka/
-│   └── tests/                            # 45 tests
+│   └── tests/                            # 68 tests
 │
 ├── search-service/                       # Java — Spring Boot + Elasticsearch
 │   ├── src/main/java/com/ecommerce/search/
@@ -609,7 +609,7 @@ curl -X POST http://localhost:9000/api/orders \
 | Order Service | Python | 52 | Order creation, stock checks, cancellation, outbox, circuit breaker |
 | Inventory Service | Python | 18 | CRUD, stock check, reduce, restock |
 | Notification Service | Python | 42 | Email templates, SMTP, Kafka routing |
-| AI Service | Python | 45 | All 3 LLM providers, 4 AI features |
+| AI Service | Python | 68 | All 3 LLM providers, 4 AI features, LLM output validation |
 | Search Service | Java | 25 | Search, fuzzy match, autocomplete, diff-and-reconcile |
 
 **Total: 235+ unit tests**

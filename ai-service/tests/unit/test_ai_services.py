@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 MOCK_PRODUCTS = [
     {
+        "id": "prod-001",
         "name": "iPhone 15 Pro",
         "price": 999.99,
         "category": "Electronics",
@@ -13,6 +14,7 @@ MOCK_PRODUCTS = [
         "description": "Latest Apple smartphone",
     },
     {
+        "id": "prod-002",
         "name": "AirPods Pro",
         "price": 249.99,
         "category": "Electronics",
@@ -102,18 +104,44 @@ async def test_chat_no_history(mock_products, mock_llm):
 @pytest.mark.asyncio
 @patch("app.services.recommendation.llm_client")
 @patch("app.services.recommendation.get_all_products", new_callable=AsyncMock, return_value=MOCK_PRODUCTS)
-async def test_recommendations_returns_llm_response(mock_products, mock_llm):
+async def test_recommendations_returns_catalog_products(mock_products, mock_llm):
     from app.services.recommendation import get_recommendations
-    mock_llm.generate = AsyncMock(return_value='{"recommendations": []}')
+    mock_llm.generate = AsyncMock(return_value='{"recommendations": [{"name": "AirPods Pro", "reason": "Pairs well"}]}')
     result = await get_recommendations(product_name="iPhone", category="Electronics")
-    assert "recommendations" in result
+    assert result == [{
+        "id": "prod-002", "name": "AirPods Pro", "price": 249.99,
+        "category": "Electronics", "image_url": None, "reason": "Pairs well",
+    }]
+
+@pytest.mark.asyncio
+@patch("app.services.recommendation.llm_client")
+@patch("app.services.recommendation.get_all_products", new_callable=AsyncMock, return_value=MOCK_PRODUCTS)
+async def test_recommendations_drops_hallucinated_products(mock_products, mock_llm):
+    from app.services.recommendation import get_recommendations
+    mock_llm.generate = AsyncMock(return_value=(
+        '{"recommendations": [{"name": "Galaxy S99", "reason": "Made up"},'
+        ' {"name": "iphone 15 pro", "reason": "Real, different case"}]}'
+    ))
+    result = await get_recommendations(category="Electronics")
+    assert [r["id"] for r in result] == ["prod-001"]
+
+@pytest.mark.asyncio
+@patch("app.services.recommendation.llm_client")
+@patch("app.services.recommendation.get_all_products", new_callable=AsyncMock, return_value=MOCK_PRODUCTS)
+async def test_recommendations_invalid_llm_reply_raises_502(mock_products, mock_llm):
+    from fastapi import HTTPException
+    from app.services.recommendation import get_recommendations
+    mock_llm.generate = AsyncMock(return_value="Sorry, the AI service is temporarily busy.")
+    with pytest.raises(HTTPException) as exc:
+        await get_recommendations(product_name="iPhone")
+    assert exc.value.status_code == 502
 
 @pytest.mark.asyncio
 @patch("app.services.recommendation.llm_client")
 @patch("app.services.recommendation.get_all_products", new_callable=AsyncMock, return_value=MOCK_PRODUCTS)
 async def test_recommendations_includes_product_name_in_prompt(mock_products, mock_llm):
     from app.services.recommendation import get_recommendations
-    mock_llm.generate = AsyncMock(return_value="[]")
+    mock_llm.generate = AsyncMock(return_value='{"recommendations": []}')
     await get_recommendations(product_name="iPhone 15 Pro")
     call_args = mock_llm.generate.call_args
     assert "iPhone 15 Pro" in call_args.kwargs["prompt"]
@@ -123,7 +151,7 @@ async def test_recommendations_includes_product_name_in_prompt(mock_products, mo
 @patch("app.services.recommendation.get_all_products", new_callable=AsyncMock, return_value=MOCK_PRODUCTS)
 async def test_recommendations_includes_category_in_prompt(mock_products, mock_llm):
     from app.services.recommendation import get_recommendations
-    mock_llm.generate = AsyncMock(return_value="[]")
+    mock_llm.generate = AsyncMock(return_value='{"recommendations": []}')
     await get_recommendations(category="Electronics")
     call_args = mock_llm.generate.call_args
     assert "Electronics" in call_args.kwargs["prompt"]
@@ -131,11 +159,12 @@ async def test_recommendations_includes_category_in_prompt(mock_products, mock_l
 @pytest.mark.asyncio
 @patch("app.services.recommendation.llm_client")
 @patch("app.services.recommendation.get_all_products", new_callable=AsyncMock, return_value=[])
-async def test_recommendations_handles_empty_catalog(mock_products, mock_llm):
+async def test_recommendations_empty_catalog_skips_llm(mock_products, mock_llm):
     from app.services.recommendation import get_recommendations
-    mock_llm.generate = AsyncMock(return_value='{"recommendations": []}')
+    mock_llm.generate = AsyncMock()
     result = await get_recommendations()
-    assert "recommendations" in result
+    assert result == []
+    mock_llm.generate.assert_not_called()
 
 
 # ─── suggestion ──────────────────────────────────────────────────────────────
@@ -143,11 +172,19 @@ async def test_recommendations_handles_empty_catalog(mock_products, mock_llm):
 @pytest.mark.asyncio
 @patch("app.services.suggestion.llm_client")
 @patch("app.services.suggestion.get_all_products", new_callable=AsyncMock, return_value=MOCK_PRODUCTS)
-async def test_suggest_returns_llm_response(mock_products, mock_llm):
+async def test_suggest_returns_catalog_matches(mock_products, mock_llm):
     from app.services.suggestion import suggest_products
-    mock_llm.generate = AsyncMock(return_value='{"matches": [], "search_tags": ["gift"]}')
+    mock_llm.generate = AsyncMock(return_value=(
+        '{"matches": [{"name": "AirPods Pro", "price": 1.0, "match_reason": "Great gift"},'
+        ' {"name": "Fake Watch", "match_reason": "Invented"}],'
+        ' "search_tags": ["gift", 42], "search_category": "Electronics"}'
+    ))
     result = await suggest_products("birthday gift")
-    assert "matches" in result
+    assert [m["id"] for m in result["matches"]] == ["prod-002"]
+    assert result["matches"][0]["price"] == 249.99  # catalog price, not the LLM's
+    assert result["matches"][0]["match_reason"] == "Great gift"
+    assert result["search_tags"] == ["gift"]
+    assert result["search_category"] == "Electronics"
 
 @pytest.mark.asyncio
 @patch("app.services.suggestion.llm_client")
@@ -155,18 +192,31 @@ async def test_suggest_returns_llm_response(mock_products, mock_llm):
 async def test_suggest_includes_query_in_prompt(mock_products, mock_llm):
     from app.services.suggestion import suggest_products
     mock_llm.generate = AsyncMock(return_value="{}")
-    await suggest_products("warm jacket under $50")
+    result = await suggest_products("warm jacket under $50")
     call_args = mock_llm.generate.call_args
     assert "warm jacket under $50" in call_args.kwargs["prompt"]
+    assert result == {"matches": [], "search_tags": [], "search_category": None}
+
+@pytest.mark.asyncio
+@patch("app.services.suggestion.llm_client")
+@patch("app.services.suggestion.get_all_products", new_callable=AsyncMock, return_value=MOCK_PRODUCTS)
+async def test_suggest_invalid_llm_reply_raises_502(mock_products, mock_llm):
+    from fastapi import HTTPException
+    from app.services.suggestion import suggest_products
+    mock_llm.generate = AsyncMock(return_value="not json at all")
+    with pytest.raises(HTTPException) as exc:
+        await suggest_products("anything")
+    assert exc.value.status_code == 502
 
 @pytest.mark.asyncio
 @patch("app.services.suggestion.llm_client")
 @patch("app.services.suggestion.get_all_products", new_callable=AsyncMock, return_value=[])
-async def test_suggest_handles_empty_catalog(mock_products, mock_llm):
+async def test_suggest_empty_catalog_skips_llm(mock_products, mock_llm):
     from app.services.suggestion import suggest_products
-    mock_llm.generate = AsyncMock(return_value='{"matches": []}')
+    mock_llm.generate = AsyncMock()
     result = await suggest_products("anything")
-    assert "matches" in result
+    assert result["matches"] == []
+    mock_llm.generate.assert_not_called()
 
 
 # ─── notification_ai ─────────────────────────────────────────────────────────
