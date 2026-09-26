@@ -366,6 +366,17 @@ async def test_update_order_status_success():
     assert result.status == OrderStatus.SHIPPED
 
 @pytest.mark.asyncio
+async def test_update_order_status_refreshes_updated_at():
+    db = make_mock_db()
+    mock_order = make_mock_order(status=OrderStatus.CONFIRMED)
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = mock_order
+    db.execute = AsyncMock(return_value=mock_result)
+
+    await update_order_status(str(mock_order.id), OrderStatusUpdate(status=OrderStatus.SHIPPED), db)
+    db.refresh.assert_awaited_once_with(mock_order, ["updated_at", "items"])
+
+@pytest.mark.asyncio
 async def test_update_order_status_not_found_raises_404():
     db = make_mock_db()
     mock_result = MagicMock()
@@ -397,6 +408,32 @@ async def test_cancel_order_success():
 
     result = await cancel_order(str(mock_order.id), db)
     assert result.status == OrderStatus.CANCELLED
+
+@pytest.mark.asyncio
+async def test_cancel_order_refreshes_updated_at():
+    # updated_at is expired by the flush (DB onupdate); it must be reloaded before serialization
+    db = make_mock_db()
+    mock_order = make_mock_order(status=OrderStatus.CONFIRMED)
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = mock_order
+    db.execute = AsyncMock(return_value=mock_result)
+    db.refresh = AsyncMock()
+
+    await cancel_order(str(mock_order.id), db)
+    db.refresh.assert_awaited_once_with(mock_order, ["updated_at", "items"])
+
+@pytest.mark.asyncio
+async def test_cancel_already_cancelled_order_raises_400():
+    db = make_mock_db()
+    mock_order = make_mock_order(status=OrderStatus.CANCELLED)
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = mock_order
+    db.execute = AsyncMock(return_value=mock_result)
+
+    with pytest.raises(HTTPException) as exc:
+        await cancel_order(str(mock_order.id), db)
+    assert exc.value.status_code == 400
+    db.add.assert_not_called()  # no second order-cancelled event in the outbox
 
 @pytest.mark.asyncio
 async def test_cancel_shipped_order_raises_400():
