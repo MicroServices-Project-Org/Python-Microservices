@@ -69,3 +69,10 @@ def test_every_handler_gets_the_same_decision():
     for _ in range(5):
         logger.error("Unable connect to node %s", 1)
     assert lines(stdout) == lines(logfile) == ["Unable connect to node 1"]
+
+
+def test_tests_do_not_log_into_the_real_logs_dir():
+    # tests/conftest.py points LOG_DIR at a temp dir, so pytest runs never write to
+    # logs/<service>.log (which Promtail ships to Loki as if the service logged it)
+    from app import logging_config
+    assert logging_config.LOG_DIR != logging_config._PROJECT_ROOT / "logs"

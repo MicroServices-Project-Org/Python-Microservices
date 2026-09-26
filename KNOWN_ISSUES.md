@@ -6,12 +6,6 @@ Open bugs and code/doc mismatches come first, then fixed issues, then the infras
 
 Found during a full end-to-end run (all 7 services plus infra, through the gateway with a Keycloak token) and two live Kafka-outage tests on 2026-09-26.
 
-## 9. Unit tests write fake errors into the real `logs/` files
-
-- **Where:** `ai-service` and `api-gateway` tests (anything that imports `app.main`) vs `app/logging_config.py`
-- **Problem:** `setup_logging()` runs when `app.main` is imported and adds a file handler for `logs/<service>.log`. Tests that import `app.main` therefore append to the same file the running service uses. Measured: one `pytest` run added 17 lines to `logs/ai-service.log` (e.g. `ERROR Unparseable LLM recommendation reply: 'busy, try later'`, `WARNING Dropping LLM-suggested product not in catalog: 'Made Up'`) and 3 to `logs/api-gateway.log`. Promtail ships them to Loki, so Grafana shows errors that never happened in the running system.
-- **Fix:** In each `tests/conftest.py`, set `LOG_DIR` to a temp directory before `app.main` is imported (`logging_config` already reads `LOG_DIR` from the environment), or skip the file handler under pytest.
-
 ## 10. aiokafka consumer can stay stuck after an unclean Kafka restart
 
 - **Where:** aiokafka consumers (notification, AI order-placed, AI cache invalidator)
@@ -39,9 +33,10 @@ Found during a full end-to-end run (all 7 services plus infra, through the gatew
 | 3 | Broken links in the README's "Service Documentation" table | #24 |
 | 4 | AI Service defaulted to Gemini instead of Groq, and `factory.py` listed an OpenAI provider that didn't exist | #22 |
 | 5 | Unit tests read the developer's local `.env` (e.g. `AUTH_ENABLED=true` failed 21 gateway tests). Fixed by `tests/conftest.py` in each service | #27 |
-| 6 | `PATCH /api/orders/{id}/cancel` and `/status` always returned 500 and rolled back (`updated_at` expired by the flush, then lazy-loaded during serialization → `MissingGreenlet`). Re-cancelling also queued a second `order-cancelled` event | #31 *(awaiting merge)* |
-| 7 | Search autocomplete returned 500 for any query containing a space, e.g. `iPhone 15` (`Criteria.contains()` rejects whitespace) | #32 *(awaiting merge)* |
-| 8 | Kafka outages: aiokafka flooded logs (~700 MB/service; 3,477 lines/min from notification alone), notification and AI consumers died silently if Kafka was down at startup, product-service refused to start, and the order outbox never restarted its producer | #33 *(awaiting merge)* |
+| 6 | `PATCH /api/orders/{id}/cancel` and `/status` always returned 500 and rolled back (`updated_at` expired by the flush, then lazy-loaded during serialization → `MissingGreenlet`). Re-cancelling also queued a second `order-cancelled` event | #31 |
+| 7 | Search autocomplete returned 500 for any query containing a space, e.g. `iPhone 15` (`Criteria.contains()` rejects whitespace) | #32 |
+| 8 | Kafka outages: aiokafka flooded logs (~700 MB/service; 3,477 lines/min from notification alone), notification and AI consumers died silently if Kafka was down at startup, product-service refused to start, and the order outbox never restarted its producer | #33 |
+| 9 | AI and gateway unit tests wrote fake errors into the real `logs/<service>.log` (17 + 3 lines per run), which Promtail shipped to Loki. Each `tests/conftest.py` now points `LOG_DIR` at a temp dir | #35 |
 | — | All six `app/config.py` typed `model_config` as pydantic's `ConfigDict` instead of `SettingsConfigDict` (Pylance errors, no runtime effect) | #30 |
 | — | Groq retired `llama-3.3-70b-versatile` (404 `model_not_found`). Default switched to `openai/gpt-oss-120b` | #29 |
 | — | Keycloak healthcheck never passed (no `curl` in image, wrong port, health endpoints disabled) | #26 |
