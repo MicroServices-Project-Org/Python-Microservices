@@ -694,6 +694,8 @@ docker-compose up -d
 docker ps --format "table {{.Names}}\t{{.Status}}"
 ```
 
+All stateful containers (Mongo, Postgres, Kafka, Zookeeper, Redis, Elasticsearch, Keycloak, Prometheus, Grafana, Loki, Tempo) use named volumes, so `docker compose down` keeps your data. `docker compose down -v` wipes all of it.
+
 ---
 
 ## 🚀 Running the Application
