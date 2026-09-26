@@ -93,6 +93,14 @@ def match_products(items: list, index: dict[str, dict], reason_key: str) -> list
     return matched
 
 
+def exclude_named(entries: list[dict], name: str) -> list[dict]:
+    """Drop entries whose name matches `name` (case/whitespace-insensitive). No-op for an empty name."""
+    target = _normalize(name or "")
+    if not target:
+        return entries
+    return [e for e in entries if _normalize(e.get("name") or "") != target]
+
+
 def to_picks(matched: list[dict], reason_key: str) -> list[dict]:
     """Reduce matched products to what the cache stores: id + LLM reason."""
     return [{"id": m["id"], reason_key: m[reason_key]} for m in matched if m.get("id")]

@@ -145,6 +145,28 @@ async def test_recommendations_includes_product_name_in_prompt(mock_products, mo
     await get_recommendations(product_name="iPhone 15 Pro")
     call_args = mock_llm.generate.call_args
     assert "iPhone 15 Pro" in call_args.kwargs["prompt"]
+    assert "Do not recommend 'iPhone 15 Pro' itself" in call_args.kwargs["prompt"]
+
+@pytest.mark.asyncio
+@patch("app.services.recommendation.llm_client")
+@patch("app.services.recommendation.get_catalog", new_callable=AsyncMock, return_value=MOCK_PRODUCTS)
+async def test_recommendations_exclude_queried_product(mock_products, mock_llm):
+    from app.services.recommendation import get_recommendations
+    mock_llm.generate = AsyncMock(return_value=(
+        '{"recommendations": [{"name": "iPhone 15 Pro", "reason": "The same phone"},'
+        ' {"name": "AirPods Pro", "reason": "Pairs well"}]}'
+    ))
+    result = await get_recommendations(product_name="  iphone 15 PRO ")
+    assert [r["id"] for r in result] == ["prod-002"]
+
+@pytest.mark.asyncio
+@patch("app.services.recommendation.llm_client")
+@patch("app.services.recommendation.get_catalog", new_callable=AsyncMock, return_value=MOCK_PRODUCTS)
+async def test_recommendations_category_only_prompt_has_no_exclusion(mock_products, mock_llm):
+    from app.services.recommendation import get_recommendations
+    mock_llm.generate = AsyncMock(return_value='{"recommendations": []}')
+    await get_recommendations(category="Electronics")
+    assert "Do not recommend" not in mock_llm.generate.call_args.kwargs["prompt"]
 
 @pytest.mark.asyncio
 @patch("app.services.recommendation.llm_client")

@@ -6,23 +6,11 @@ Open bugs and code/doc mismatches come first, then fixed issues, then the infras
 
 Found during a full end-to-end run (all 7 services plus infra, through the gateway with a Keycloak token) and two live Kafka-outage tests on 2026-09-26.
 
-## 10. aiokafka consumer can stay stuck after an unclean Kafka restart
-
-- **Where:** aiokafka consumers (notification, AI order-placed, AI cache invalidator)
-- **Problem:** Observed once: after Docker Desktop quit uncleanly and Kafka came back (its first start crashed on a stale ZooKeeper broker registration, then recovered), an AI service consumer kept logging `GroupCoordinatorNotAvailableError` / `Heartbeat session expired` for 30+ minutes while Kafka and the consumer group were healthy. aiokafka retries this internally and never raises, so the retry loops from #33 don't restart it. That process ran pre-#33 code. A clean `docker stop kafka` / `docker start kafka`, both at startup and mid-run, recovered fine with #33.
-- **Fix:** Try to reproduce (kill the Kafka container with `docker kill`, not `stop`). If it reproduces, add a watchdog that recreates the consumer when it has had no partition assignment for N minutes.
-
 ## 11. Cancelling an order doesn't restock inventory
 
 - **Where:** `order-service/app/services/order_service.py` (`cancel_order`)
 - **Problem:** Placing an order reduces stock over HTTP, but cancelling only sets the status and emits `order-cancelled`. Nothing gives the stock back (verified live: stock stayed at 8 after cancelling a 2-unit order from 10). The docs don't promise restocking, so this is a design decision, not a bug yet.
 - **Fix:** Decide the intended behavior. If restocking is wanted, inventory-service could consume `order-cancelled` (the event already has the items), which keeps it async and idempotent.
-
-## 12. AI recommendations can include the product you asked about
-
-- **Where:** `ai-service/app/services/recommendation.py`
-- **Problem:** `/recommendations?product_name=iPhone 15 Pro` sometimes returns "iPhone 15 Pro" itself. Minor, and model-dependent.
-- **Fix:** Drop matches whose normalized name equals `product_name` in `get_recommendations`, before caching.
 
 # Fixed Issues
 
@@ -37,6 +25,8 @@ Found during a full end-to-end run (all 7 services plus infra, through the gatew
 | 7 | Search autocomplete returned 500 for any query containing a space, e.g. `iPhone 15` (`Criteria.contains()` rejects whitespace) | #32 |
 | 8 | Kafka outages: aiokafka flooded logs (~700 MB/service; 3,477 lines/min from notification alone), notification and AI consumers died silently if Kafka was down at startup, product-service refused to start, and the order outbox never restarted its producer | #33 |
 | 9 | AI and gateway unit tests wrote fake errors into the real `logs/<service>.log` (17 + 3 lines per run), which Promtail shipped to Loki. Each `tests/conftest.py` now points `LOG_DIR` at a temp dir | #35 |
+| 10 | aiokafka consumer seemed stuck after an unclean Kafka restart (seen once, on pre-#33 code). **Closed, could not reproduce:** after `docker kill kafka`, and after killing Kafka + ZooKeeper together (Kafka's first start hit the same `NodeExists` crash, then restarted), all three consumer groups rejoined within ~30s and live events flowed end to end. If it comes back, add a watchdog that recreates a consumer with no partition assignment for N minutes | #37 |
+| 12 | AI recommendations could include the product you asked about. Filtered out (normalized exact name) on both fresh and cached results, and the prompt now tells the model not to pick it | #37 |
 | — | All six `app/config.py` typed `model_config` as pydantic's `ConfigDict` instead of `SettingsConfigDict` (Pylance errors, no runtime effect) | #30 |
 | — | Groq retired `llama-3.3-70b-versatile` (404 `model_not_found`). Default switched to `openai/gpt-oss-120b` | #29 |
 | — | Keycloak healthcheck never passed (no `curl` in image, wrong port, health endpoints disabled) | #26 |

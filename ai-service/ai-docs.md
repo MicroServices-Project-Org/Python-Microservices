@@ -92,10 +92,10 @@ ai-service/
 │   └── unit/
 │       ├── __init__.py
 │       ├── test_llm_clients.py      # 13 tests — all 3 LLM providers
-│       ├── test_ai_services.py      # 20 tests — chatbot, recommendations, suggestion, notification
-│       ├── test_llm_output.py       # 15 tests — JSON parsing and catalog matching
+│       ├── test_ai_services.py      # 22 tests — chatbot, recommendations, suggestion, notification
+│       ├── test_llm_output.py       # 19 tests — JSON parsing and catalog matching
 │       ├── test_ai_routes.py        # 3 tests — response shapes and 502 on invalid LLM output
-│       ├── test_redis_cache.py      # 19 tests — cache primitives, fallback, catalog/LLM caching, invalidator
+│       ├── test_redis_cache.py      # 20 tests — cache primitives, fallback, catalog/LLM caching, invalidator
 │       ├── test_product_client.py   # 13 tests — product fetching, pagination, and formatting
 │       ├── test_env_example.py      # 3 tests — .env.example matches Settings
 │       └── test_kafka.py            # 3 tests — order-placed handler
@@ -180,7 +180,7 @@ LLM_PROVIDER=ollama    # Ollama (local, no API key)
 | **Endpoint** | `GET /api/ai/recommendations?product_name=iPhone&category=Electronics` |
 | **Trigger** | REST call |
 | **Input** | Product name and/or category |
-| **Output** | Up to 5 recommended catalog products (unknown names dropped) |
+| **Output** | Up to 5 recommended catalog products (unknown names and the queried product itself dropped) |
 
 ```json
 // Response
@@ -331,21 +331,22 @@ A 5-second delay between Kafka messages prevents LLM rate limit exhaustion from 
 | Groq | Success, system prompt, 500 error fallback, 429 retry + fallback |
 | Ollama | Success, 500 error fallback, connection refused, timeout |
 
-### `test_ai_services.py` — 20 tests
+### `test_ai_services.py` — 22 tests
 
 | Area | Tests |
 |---|---|
 | Chatbot | Returns LLM response, includes product context, empty catalog, passes history, no history |
-| Recommendations | Returns catalog products, drops hallucinated products, 502 on invalid LLM reply, includes product name in prompt, includes category, empty catalog skips LLM |
+| Recommendations | Returns catalog products, drops hallucinated products, 502 on invalid LLM reply, includes product name in prompt, excludes the queried product, no exclusion line without a product name, includes category, empty catalog skips LLM |
 | Suggestion | Returns catalog matches with catalog prices, includes query in prompt, 502 on invalid LLM reply, empty catalog skips LLM |
 | Notification AI | Returns subject + body, includes customer in prompt, malformed response, markdown-fenced JSON, empty catalog |
 
-### `test_llm_output.py` — 15 tests
+### `test_llm_output.py` — 19 tests
 
 | Area | Tests |
 |---|---|
 | parse_llm_json | Plain JSON, markdown fences, surrounding prose, trailing commas, comma fallback leaves valid JSON alone, non-JSON, empty, array, broken JSON |
 | match_products | Catalog fields only, case/whitespace-insensitive, drops unknown/malformed items, dedupes in LLM order, non-list input, first duplicate name wins |
+| exclude_named | Case/whitespace-insensitive, exact name only, empty name no-op, missing names |
 
 ### `test_ai_routes.py` — 3 tests
 
@@ -353,7 +354,7 @@ A 5-second delay between Kafka messages prevents LLM rate limit exhaustion from 
 |---|---|
 | Routes | Structured recommendations response, structured suggest response, 502 passthrough |
 
-### `test_redis_cache.py` — 19 tests
+### `test_redis_cache.py` — 20 tests
 
 Uses an in-memory `FakeRedis`. `tests/conftest.py` has an autouse fixture that disables the cache everywhere else, so no test touches a real Redis.
 
@@ -361,7 +362,7 @@ Uses an in-memory `FakeRedis`. `tests/conftest.py` has an autouse fixture that d
 |---|---|
 | Primitives | Round trip + TTL, normalized keys, distinct keys, invalidate changes keys, miss, corrupt value, disabled no-op, `CACHE_ENABLED=false`, Redis down fails soft + backs off |
 | Catalog | Fetched once then cached, empty not cached, refetched after invalidate |
-| Recommendations / suggest | Hit skips LLM and shows current price, deleted product dropped, empty result not cached, invalid reply not cached, stores only ids + reasons, suggest hit matches miss |
+| Recommendations / suggest | Hit skips LLM and shows current price, hit drops the queried product, deleted product dropped, empty result not cached, invalid reply not cached, stores only ids + reasons, suggest hit matches miss |
 | Invalidator | One invalidate per event, own consumer group |
 
 ### `test_product_client.py` — 13 tests

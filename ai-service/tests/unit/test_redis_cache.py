@@ -169,6 +169,18 @@ async def test_recommendation_cached_pick_dropped_when_product_deleted(mock_cata
 
 @patch("app.services.recommendation.llm_client")
 @patch("app.services.recommendation.get_catalog", new_callable=AsyncMock, return_value=MOCK_PRODUCTS)
+async def test_recommendation_cache_hit_drops_queried_product(mock_catalog, mock_llm, fake_redis):
+    """Entries cached before the filter existed can hold the queried product; the hit path drops it."""
+    from app.services.recommendation import get_recommendations
+    key = await redis_cache.make_key("rec", "iPhone 15 Pro", "")
+    await redis_cache.set_json(key, [{"id": "p1", "reason": "Same"}, {"id": "p2", "reason": "Pairs well"}], 60)
+    mock_llm.generate = AsyncMock()
+    result = await get_recommendations(product_name="iPhone 15 Pro")
+    mock_llm.generate.assert_not_awaited()
+    assert [r["id"] for r in result] == ["p2"]
+
+@patch("app.services.recommendation.llm_client")
+@patch("app.services.recommendation.get_catalog", new_callable=AsyncMock, return_value=MOCK_PRODUCTS)
 async def test_recommendation_empty_result_not_cached(mock_catalog, mock_llm, fake_redis):
     from app.services.recommendation import get_recommendations
     mock_llm.generate = AsyncMock(return_value='{"recommendations": [{"name": "Made Up"}]}')
