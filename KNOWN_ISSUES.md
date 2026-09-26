@@ -6,11 +6,11 @@ Open bugs and code/doc mismatches come first, then fixed issues, then the infras
 
 Found during a full end-to-end run (all 7 services plus infra, through the gateway with a Keycloak token) and two live Kafka-outage tests on 2026-09-26.
 
-## 11. Cancelling an order doesn't restock inventory
+## 13. Nothing publishes `inventory-low`
 
-- **Where:** `order-service/app/services/order_service.py` (`cancel_order`)
-- **Problem:** Placing an order reduces stock over HTTP, but cancelling only sets the status and emits `order-cancelled`. Nothing gives the stock back (verified live: stock stayed at 8 after cancelling a 2-unit order from 10). The docs don't promise restocking, so this is a design decision, not a bug yet.
-- **Fix:** Decide the intended behavior. If restocking is wanted, inventory-service could consume `order-cancelled` (the event already has the items), which keeps it async and idempotent.
+- **Where:** README ("Asynchronous (Kafka)" and "Kafka Topics") and CLAUDE.md ("Kafka topics")
+- **Problem:** notification-service consumes `inventory-low` and has an email template for it, but no service produces it. README says Inventory Service publishes it, and CLAUDE.md says the AI service does. inventory-service had no Kafka code at all before #38, and `ai-service` never references the topic.
+- **Fix:** Decide whether low-stock alerts are wanted. If so, publish from inventory-service when `reduce_stock` takes `available_qty` below a threshold (ideally through an outbox, like order-service). Otherwise, remove the topic from the docs and notification-service.
 
 # Fixed Issues
 
@@ -26,6 +26,7 @@ Found during a full end-to-end run (all 7 services plus infra, through the gatew
 | 8 | Kafka outages: aiokafka flooded logs (~700 MB/service; 3,477 lines/min from notification alone), notification and AI consumers died silently if Kafka was down at startup, product-service refused to start, and the order outbox never restarted its producer | #33 |
 | 9 | AI and gateway unit tests wrote fake errors into the real `logs/<service>.log` (17 + 3 lines per run), which Promtail shipped to Loki. Each `tests/conftest.py` now points `LOG_DIR` at a temp dir | #35 |
 | 10 | aiokafka consumer seemed stuck after an unclean Kafka restart (seen once, on pre-#33 code). **Closed, could not reproduce:** after `docker kill kafka`, and after killing Kafka + ZooKeeper together (Kafka's first start hit the same `NodeExists` crash, then restarted), all three consumer groups rejoined within ~30s and live events flowed end to end. If it comes back, add a watchdog that recreates a consumer with no partition assignment for N minutes | #37 |
+| 11 | Cancelling an order didn't restock inventory. inventory-service now consumes `order-cancelled` and adds the stock back, idempotently (`processed_events` row in the same transaction), with offsets committed only after the restock commits | #38 |
 | 12 | AI recommendations could include the product you asked about. Filtered out (normalized exact name) on both fresh and cached results, and the prompt now tells the model not to pick it | #37 |
 | — | All six `app/config.py` typed `model_config` as pydantic's `ConfigDict` instead of `SettingsConfigDict` (Pylance errors, no runtime effect) | #30 |
 | — | Groq retired `llama-3.3-70b-versatile` (404 `model_not_found`). Default switched to `openai/gpt-oss-120b` | #29 |

@@ -1,8 +1,15 @@
+import json
+import logging
+from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from fastapi import HTTPException, status
 from app.models.inventory import Inventory
+from app.models.processed_event import ProcessedEvent
 from app.schemas.inventory import InventoryCreate, InventoryUpdate
+
+logger = logging.getLogger(__name__)
 
 async def create_inventory(data: InventoryCreate, db: AsyncSession) -> Inventory:
     # Check if product_id already exists
@@ -75,3 +82,55 @@ async def delete_inventory(product_id: str, db: AsyncSession) -> dict:
     item = await get_inventory(product_id, db)
     await db.delete(item)
     return {"message": f"Inventory for product {product_id} deleted successfully"}
+
+
+def parse_cancelled_order(raw: bytes) -> tuple[str, list[tuple[str, int]]]:
+    """
+    Read an order-cancelled event into (order_number, [(product_id, quantity), ...]).
+    Raises ValueError if it isn't a usable event, so the consumer can skip it.
+    """
+    event = json.loads(raw)
+    order_number = event.get("order_number") if isinstance(event, dict) else None
+    items = event.get("items") if isinstance(event, dict) else None
+    if not isinstance(order_number, str) or not order_number or not isinstance(items, list):
+        raise ValueError("missing order_number or items")
+    parsed = []
+    for item in items:
+        product_id = item.get("product_id") if isinstance(item, dict) else None
+        quantity = item.get("quantity") if isinstance(item, dict) else None
+        if not isinstance(product_id, str) or type(quantity) is not int or quantity <= 0:
+            raise ValueError(f"bad item: {item!r}")
+        parsed.append((product_id, quantity))
+    return order_number, parsed
+
+
+async def restock_cancelled_order(order_number: str, items: list[tuple[str, int]], db: AsyncSession) -> Optional[int]:
+    """
+    Give back the stock of a cancelled order. Idempotent: the order is recorded in
+    processed_events in the same transaction as the stock updates, so a redelivered
+    event restocks nothing. Returns how many items were restocked, or None if this
+    order was already processed.
+    """
+    claimed = await db.execute(
+        pg_insert(ProcessedEvent)
+        .values(event_key=f"{order_number}_ORDER_CANCELLED")
+        .on_conflict_do_nothing()
+        .returning(ProcessedEvent.event_key)
+    )
+    if claimed.scalar_one_or_none() is None:
+        return None
+
+    restocked = 0
+    for product_id, quantity in items:
+        # Single UPDATE (not read-modify-write) so a concurrent reduce_stock can't be overwritten
+        result = await db.execute(
+            update(Inventory)
+            .where(Inventory.product_id == product_id)
+            .values(quantity=Inventory.quantity + quantity)
+        )
+        if result.rowcount == 0:
+            logger.warning("Order %s cancelled, but product %s has no inventory row; not restocked",
+                           order_number, product_id)
+        else:
+            restocked += 1
+    return restocked

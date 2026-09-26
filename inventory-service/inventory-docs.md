@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Inventory Service is the third microservice in the FastAPI Microservices project. It manages product stock levels using PostgreSQL as its database. It is called synchronously by the Order Service before confirming any order to verify stock availability.
+The Inventory Service is the third microservice in the FastAPI Microservices project. It manages product stock levels using PostgreSQL as its database. It is called synchronously by the Order Service before confirming any order to verify stock availability, and it consumes `order-cancelled` events from Kafka to put cancelled stock back.
 
 ---
 
@@ -33,8 +33,11 @@ inventory-service/
 │   ├── main.py                      # FastAPI app, lifespan, table creation
 │   ├── config.py                    # Settings from .env via pydantic-settings
 │   ├── database.py                  # SQLAlchemy async engine, session factory
+│   ├── kafka/
+│   │   └── consumer.py              # order-cancelled consumer (restocks cancelled orders)
 │   ├── models/
-│   │   └── inventory.py             # SQLAlchemy ORM table definition
+│   │   ├── inventory.py             # SQLAlchemy ORM table definition
+│   │   └── processed_event.py       # Kafka events already applied (idempotency)
 │   ├── schemas/
 │   │   └── inventory.py             # Pydantic request/response schemas
 │   ├── routes/
@@ -59,6 +62,12 @@ Table: inventory
 
 Computed: available_qty = quantity - reserved_qty
 Index: product_id (unique)
+
+Table: processed_events
+┌──────────────────────┬──────────────────────────┐
+│ event_key (PK)       │ processed_at             │
+└──────────────────────┴──────────────────────────┘
+event_key = "<order_number>_ORDER_CANCELLED"
 ```
 
 **Why UUID primary key?**
@@ -151,6 +160,9 @@ POSTGRES_PASSWORD=password
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5433
 POSTGRES_DB=inventory_db
+KAFKA_BOOTSTRAP_SERVERS=localhost:9092
+KAFKA_ORDER_CANCELLED_TOPIC=order-cancelled
+KAFKA_GROUP_ID=inventory-group
 ```
 
 > **Note:** PostgreSQL port is `5433` (mapped from container's `5432`) due to a local PostgreSQL installation occupying the default port.
@@ -172,6 +184,20 @@ PostgreSQL (inventory_db)
 ```
 
 The Order Service calls Inventory Service **synchronously** before confirming any order. If inventory is insufficient, the order is rejected before it is saved to the database.
+
+### Restock on cancel (Kafka)
+
+```
+Order Service ──► outbox ──► [order-cancelled] ──► Inventory Service ──► quantity += item quantity
+```
+
+Cancelling an order (`PATCH /api/orders/{id}/cancel`) publishes `order-cancelled` through the outbox. `app/kafka/consumer.py` adds each item's quantity back to its inventory row:
+
+- **Idempotent:** the order's `event_key` is inserted into `processed_events` (`ON CONFLICT DO NOTHING`) in the same transaction as the stock updates. A redelivered event finds the key and changes nothing, so Kafka's at-least-once delivery can't restock twice.
+- **No lost restocks:** auto-commit is off; the offset is committed only after the transaction commits. If the database is down, the consumer retries the same event every 10s instead of skipping it. `auto_offset_reset="earliest"`, so events published while the service was down are still applied.
+- **Atomic increment:** `UPDATE inventory SET quantity = quantity + n`, so a concurrent `/reduce` can't be overwritten.
+- **Bad input:** malformed events (bad JSON, missing `order_number`, non-positive quantities) are logged and skipped. Items whose product has no inventory row are logged as a warning; the rest of the order is still restocked.
+- **Kafka down:** the service still starts, and the consumer reconnects every 10s.
 
 ---
 

@@ -1,8 +1,10 @@
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from app.config import settings
 from app.database import engine, Base
 from app.routes.inventory_routes import router as inventory_router
+from app.kafka.consumer import start_consumer
 from prometheus_fastapi_instrumentator import Instrumentator
 from app.logging_config import setup_logging
 from app.tracing_config import setup_tracing
@@ -16,7 +18,14 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     print(f"✅ Connected to PostgreSQL: {settings.POSTGRES_DB}")
+    # Restocks cancelled orders; retries on its own while Kafka is down
+    consumer_task = asyncio.create_task(start_consumer())
     yield
+    consumer_task.cancel()
+    try:
+        await consumer_task
+    except asyncio.CancelledError:
+        pass
     await engine.dispose()
     print("🔌 PostgreSQL connection closed")
 

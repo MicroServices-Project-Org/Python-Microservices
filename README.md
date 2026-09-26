@@ -245,6 +245,7 @@ Order Service   ──► [order-placed]          ──► Notification Service
 Order Service   ──► [order-placed]          ──► AI Service
 AI Service      ──► [ai-notification-ready] ──► Notification Service
 Order Service   ──► [order-cancelled]       ──► Notification Service
+Order Service   ──► [order-cancelled]       ──► Inventory Service (restock)
 Inventory Svc   ──► [inventory-low]         ──► Notification Service
 Product Svc     ──► [product-updated]       ──► Search Service
 ```
@@ -266,7 +267,7 @@ Background worker:
 | Topic | Producer | Consumers | Purpose |
 |---|---|---|---|
 | `order-placed` | Order Service | Notification, AI Service | New order |
-| `order-cancelled` | Order Service | Notification Service | Cancellation |
+| `order-cancelled` | Order Service | Notification, Inventory Service | Cancellation email, restock |
 | `inventory-low` | Inventory Service | Notification Service | Stock alert |
 | `ai-notification-ready` | AI Service | Notification Service | Personalized email |
 | `product-updated` | Product Service | Search Service | Reindex in Elasticsearch |
@@ -612,7 +613,7 @@ curl -X POST http://localhost:9000/api/orders \
 | API Gateway | Python | 31 | Routing, proxying, JWT |
 | Product Service | Python | 22 | CRUD, search, Kafka publishing |
 | Order Service | Python | 52 | Order creation, stock checks, cancellation, outbox, circuit breaker |
-| Inventory Service | Python | 18 | CRUD, stock check, reduce, restock |
+| Inventory Service | Python | 54 | CRUD, stock check, reduce, restock, restock on cancel (Kafka, idempotent) |
 | Notification Service | Python | 42 | Email templates, SMTP, Kafka routing |
 | AI Service | Python | 89 | All 3 LLM providers, 4 AI features, LLM output validation, Redis cache |
 | Search Service | Java | 25 | Search, fuzzy match, autocomplete, diff-and-reconcile |
