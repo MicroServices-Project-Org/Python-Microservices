@@ -8,7 +8,9 @@ The first part lists places where the code and the docs disagree, found while wr
 - **Problem:** The README describes `ai-service/app/cache/redis_cache.py`: a cache-aside layer on Redis DB 1 with a 6h TTL for LLM product IDs, a 15min TTL for catalog data, and a graceful fallback. That module doesn't exist, and nothing in `ai-service/app` imports or uses Redis. `git log -S redis_cache` finds no commit that ever added it.
 - **Fix:** Implement the cache (and add `redis` to `ai-service/requirements.txt`), or remove the claims from the README.
 
-## 2. Two reconcile jobs run concurrently in Search Service
+## 2. Two reconcile jobs run in Search Service · ✅ fixed 2026-09-26
+
+> `ReconciliationJob.java` was deleted. It was a line-for-line copy of `DiffReconcileJob` (only the Javadoc differed) and had no tests. Spring's default single-thread scheduler ran the two back-to-back, not concurrently, so every 30 minutes the full Product Service fetch and ES re-index happened twice. `DiffReconcileJob` and its config keys are unchanged.
 
 - **Where:** `search-service/src/main/java/com/ecommerce/search/scheduler/`
 - **Problem:** `ReconciliationJob` and `DiffReconcileJob` are both `@Component`s. Each has `@Scheduled(fixedDelayString = "${reconciliation.interval.ms:1800000}")` and is gated by the same `reconciliation.enabled` flag, so both run every cycle. That means twice the reads from Product Service and Elasticsearch, and two jobs writing to ES at the same time. Only `DiffReconcileJob` has tests (`DiffReconcileJobTest`), and the README mentions only `DiffReconcileJob`.

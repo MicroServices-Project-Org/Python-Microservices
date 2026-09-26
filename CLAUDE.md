@@ -75,7 +75,7 @@ mvn test -Dtest=DiffReconcileJobTest
 - **Kafka topics**: `order-placed`, `order-cancelled` (order), `inventory-low`, `ai-notification-ready` (ai), and `product-updated` (product → search). Topics are auto-created. The `product-updated` payload nests fields under `product`, which is `null` on `PRODUCT_DELETED`. The Java consumer (`kafka/ProductEventConsumer.java`) depends on that shape.
 - **Notification idempotency** (`notification-service/app/kafka/consumer.py`): Redis `SET NX` with a 7-day TTL for each event, applied before sending.
 - **AI service**: providers implement `LLMClient.generate()` (`app/llm/base.py`) and are registered in `factory.py`. It calls Product Service over HTTP for catalog context. The README describes a Redis cache at `app/cache/redis_cache.py`, but that module does not exist in the repo yet.
-- **Search sync**: MongoDB is the source of truth. Search is kept current by the Kafka consumer plus scheduled reconcile jobs that page through the Product Service API and write only to Elasticsearch. Both `scheduler/DiffReconcileJob.java` (the tested one) and the older `scheduler/ReconciliationJob.java` are `@Component`s on the same `reconciliation.*` schedule, so both run. Do not rely on Lombok in the search service. Getters and setters are written by hand because Lombok broke on Java 21.
+- **Search sync**: MongoDB is the source of truth. Search is kept current by the Kafka consumer plus a scheduled reconcile job (`scheduler/DiffReconcileJob.java`, configured by `reconciliation.*`) that pages through the Product Service API and writes only to Elasticsearch. Do not rely on Lombok in the search service. Getters and setters are written by hand because Lombok broke on Java 21.
 
 ## Gotchas
 
