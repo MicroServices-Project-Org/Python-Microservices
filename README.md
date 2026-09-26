@@ -797,11 +797,11 @@ A `POST /api/orders` produces ~18 spans across api-gateway, order-service, and i
 | Service | Documentation |
 |---|---|
 | Product Service | [`product-service/product-service-docs.md`](product-service/product-service-docs.md) |
-| Order Service | [`order-service/order-docs.md`](order-service/order-docs.md) |
+| Order Service | [`order-service/order-docs.md`](order-service/order-docs.md), [`order-service/resilience-docs.md`](order-service/resilience-docs.md) (retry + circuit breaker) |
 | Inventory Service | [`inventory-service/inventory-docs.md`](inventory-service/inventory-docs.md) |
-| Notification Service | [`notification-service/notification-docs.md`](notification-service/notification-docs.md) |
-| AI Service | [`ai-service/ai-service-docs.md`](ai-service/ai-service-docs.md) |
-| API Gateway | [`api-gateway/api-gateway-docs.md`](api-gateway/api-gateway-docs.md) |
+| Notification Service | *No dedicated doc yet.* See the Kafka event schemas and idempotency notes in this README. |
+| AI Service | [`ai-service/ai-docs.md`](ai-service/ai-docs.md) |
+| API Gateway | [`api-gateway/gw-docs.md`](api-gateway/gw-docs.md) |
 | Search Service | [`search-service/search-service-docs.md`](search-service/search-service-docs.md) |
 
 ---
