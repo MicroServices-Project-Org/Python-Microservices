@@ -142,7 +142,7 @@
     },
     {
       "name": "Recommendations",
-      "description": "AI-powered product recommendations from real catalog. Returns JSON with product names and reasons.",
+      "description": "AI-powered product recommendations from real catalog. Returns catalog products (id, name, price, category, image_url) plus the LLM reason; names not in the catalog are dropped. 502 if the LLM reply is not valid JSON.",
       "item": [
         {
           "name": "Recommendations — By Product Name",

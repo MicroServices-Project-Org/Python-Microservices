@@ -1,5 +1,12 @@
+import logging
+
+from fastapi import HTTPException
+
 from app.llm.factory import llm_client
 from app.clients.product_client import get_all_products, format_products_for_context
+from app.services.llm_output import parse_llm_json, build_catalog_index, match_products
+
+logger = logging.getLogger(__name__)
 
 
 SYSTEM_PROMPT = """You are a product recommendation engine for our e-commerce store.
@@ -13,20 +20,23 @@ Respond in this exact JSON format and nothing else:
   ]
 }}
 
-Only recommend products that exist in our catalog. If the catalog has fewer than 5
-relevant products, recommend as many as you can.
+Only recommend products that exist in our catalog, and use each product's exact name
+as listed. If the catalog has fewer than 5 relevant products, recommend as many as you can.
 
 Here is our current product catalog:
 {catalog}
 """
 
 
-async def get_recommendations(product_name: str = "", category: str = "") -> str:
+async def get_recommendations(product_name: str = "", category: str = "") -> list[dict]:
     """
     Generate product recommendations based on a product name and/or category.
-    Returns LLM response with recommended products from the real catalog.
+    Returns catalog products the LLM picked (id, name, price, category, image_url, reason).
+    Products the LLM invented are dropped. Raises 502 if the LLM reply isn't valid JSON.
     """
     products = await get_all_products()
+    if not products:
+        return []  # Nothing to recommend from; don't spend an LLM call
     catalog = format_products_for_context(products)
     system = SYSTEM_PROMPT.format(catalog=catalog)
 
@@ -38,4 +48,9 @@ async def get_recommendations(product_name: str = "", category: str = "") -> str
     prompt += " from our catalog."
 
     response = await llm_client.generate(prompt=prompt, system_prompt=system)
-    return response
+    data = parse_llm_json(response)
+    if data is None:
+        logger.error("Unparseable LLM recommendation reply: %.200r", response)
+        raise HTTPException(status_code=502, detail="AI service returned an invalid response. Please try again.")
+
+    return match_products(data.get("recommendations", []), build_catalog_index(products), reason_key="reason")
