@@ -1,5 +1,4 @@
-from pydantic_settings import BaseSettings
-from pydantic import ConfigDict
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -40,7 +39,7 @@ class Settings(BaseSettings):
     CACHE_CATALOG_TTL: int = 900    # 15 min
     CACHE_LLM_TTL: int = 21600      # 6 h: validated product IDs picked by the LLM
 
-    model_config = ConfigDict(env_file=".env")
+    model_config = SettingsConfigDict(env_file=".env")
 
 
 settings = Settings()
