@@ -63,7 +63,7 @@ async def suggest_products(query: str) -> dict:
     response = await llm_client.generate(prompt=prompt, system_prompt=system)
     data = parse_llm_json(response)
     if data is None:
-        logger.error("Unparseable LLM suggestion reply: %.200r", response)
+        logger.error("Unparseable LLM suggestion reply: %.1000r", response)
         raise HTTPException(status_code=502, detail="AI service returned an invalid response. Please try again.")
 
     tags = data.get("search_tags")

@@ -19,7 +19,7 @@ that a customer might also be interested in.
 Respond in this exact JSON format and nothing else:
 {{
   "recommendations": [
-    {{"name": "Product Name", "reason": "Brief reason why this is recommended"}},
+    {{"name": "Product Name", "reason": "Brief reason why this is recommended"}}
   ]
 }}
 
@@ -60,7 +60,7 @@ async def get_recommendations(product_name: str = "", category: str = "") -> lis
     response = await llm_client.generate(prompt=prompt, system_prompt=system)
     data = parse_llm_json(response)
     if data is None:
-        logger.error("Unparseable LLM recommendation reply: %.200r", response)
+        logger.error("Unparseable LLM recommendation reply: %.1000r", response)
         raise HTTPException(status_code=502, detail="AI service returned an invalid response. Please try again.")
 
     matched = match_products(data.get("recommendations", []), build_catalog_index(products), reason_key="reason")

@@ -18,6 +18,13 @@ def test_parse_markdown_fenced_json():
 def test_parse_json_surrounded_by_prose():
     assert parse_llm_json('Here you go:\n{"a": {"b": 2}}\nHope that helps!') == {"a": {"b": 2}}
 
+def test_parse_trailing_commas():
+    assert parse_llm_json('{"recommendations": [{"name": "A"},\n  ],\n}') == {"recommendations": [{"name": "A"}]}
+
+def test_parse_strict_json_untouched_by_comma_fallback():
+    # Valid JSON parses on the first try, so a ", ]" inside a string is never rewritten
+    assert parse_llm_json('{"reason": "a, ]b"}') == {"reason": "a, ]b"}
+
 def test_parse_non_json_returns_none():
     assert parse_llm_json("Sorry, the AI service is temporarily busy.") is None
 

@@ -2,7 +2,7 @@
 
 ![CI](https://github.com/MicroServices-Project-Org/Python-Microservices/actions/workflows/ci.yml/badge.svg)
 
-A production-grade microservices architecture built with **FastAPI**, **Spring Boot**, **Kafka**, **PostgreSQL**, **MongoDB**, **Elasticsearch**, **Redis**, and **Groq/Llama 3.3** — designed to demonstrate real-world patterns including event-driven communication, inter-service REST calls, JWT authentication, rate limiting, resilience patterns, full-text search, AI integration, full-stack observability with metrics + logs + distributed tracing, and a CI pipeline that runs all 210+ tests on every PR.
+A production-grade microservices architecture built with **FastAPI**, **Spring Boot**, **Kafka**, **PostgreSQL**, **MongoDB**, **Elasticsearch**, **Redis**, and **Groq (GPT-OSS 120B)** — designed to demonstrate real-world patterns including event-driven communication, inter-service REST calls, JWT authentication, rate limiting, resilience patterns, full-text search, AI integration, full-stack observability with metrics + logs + distributed tracing, and a CI pipeline that runs all 210+ tests on every PR.
 
 **Polyglot architecture:** Python services for core e-commerce + AI, Java service for search — demonstrating that microservices allow each service to use the best language for the job.
 
@@ -101,7 +101,7 @@ All 7 services expose Prometheus metrics, emit JSON logs to Loki, and (Python se
 | **ORM** | SQLAlchemy (async) for PostgreSQL, Motor (async) for MongoDB, Spring Data JPA, Spring Data Elasticsearch |
 | **Validation** | Pydantic v2, Jakarta Bean Validation |
 | **HTTP Client** | httpx (async), RestTemplate (Spring) |
-| **AI/LLM** | Groq (Llama 3.3 70B) — provider-agnostic, supports Gemini & Ollama |
+| **AI/LLM** | Groq (`openai/gpt-oss-120b`) — provider-agnostic, supports Gemini & Ollama |
 | **Authentication** | Keycloak 24.0 (OAuth2 / JWT) + PyJWT |
 | **Rate Limiting** | slowapi |
 | **Resilience** | tenacity (retry), custom async circuit breaker, Spring `@Scheduled` (diff-and-reconcile) |
@@ -193,7 +193,7 @@ Python-Microservices/
 │   │   ├── routes/ai_routes.py
 │   │   ├── services/
 │   │   └── kafka/
-│   └── tests/                            # 87 tests
+│   └── tests/                            # 89 tests
 │
 ├── search-service/                       # Java — Spring Boot + Elasticsearch
 │   ├── src/main/java/com/ecommerce/search/
@@ -438,7 +438,7 @@ Every step is **traced end-to-end** in Tempo — one trace_id stitches together 
 
 | Feature | Endpoint | LLM Provider | Description |
 |---|---|---|---|
-| Shopping Chatbot | `POST /api/ai/chat` | Groq (Llama 3.3 70B) | Conversational assistant |
+| Shopping Chatbot | `POST /api/ai/chat` | Groq (GPT-OSS 120B) | Conversational assistant |
 | Recommendations | `GET /api/ai/recommendations` | Groq | 5 related products |
 | Smart Search | `POST /api/ai/suggest` | Groq | Natural language → products |
 | Email Personalization | Kafka event | Groq | AI-generated emails |
@@ -446,7 +446,7 @@ Every step is **traced end-to-end** in Tempo — one trace_id stitches together 
 ### Provider-Agnostic Design
 Switch by changing one line in `.env`:
 ```
-LLM_PROVIDER=groq      # Groq / Llama 3.3 70B (current)
+LLM_PROVIDER=groq      # Groq / GPT-OSS 120B (current)
 LLM_PROVIDER=gemini    # Google Gemini
 LLM_PROVIDER=ollama    # Ollama (local)
 ```
@@ -609,7 +609,7 @@ curl -X POST http://localhost:9000/api/orders \
 | Order Service | Python | 52 | Order creation, stock checks, cancellation, outbox, circuit breaker |
 | Inventory Service | Python | 18 | CRUD, stock check, reduce, restock |
 | Notification Service | Python | 42 | Email templates, SMTP, Kafka routing |
-| AI Service | Python | 87 | All 3 LLM providers, 4 AI features, LLM output validation, Redis cache |
+| AI Service | Python | 89 | All 3 LLM providers, 4 AI features, LLM output validation, Redis cache |
 | Search Service | Java | 25 | Search, fuzzy match, autocomplete, diff-and-reconcile |
 
 **Total: 235+ unit tests**
@@ -853,7 +853,7 @@ Phase 3 ✅ Async Layer
   └── Notification Service (Python, Kafka consumer, Gmail SMTP)
 
 Phase 4 ✅ AI Layer
-  └── AI Service (Python, Groq/Llama 3.3 70B, provider-agnostic, Kafka, Redis caching)
+  └── AI Service (Python, Groq/GPT-OSS 120B, provider-agnostic, Kafka, Redis caching)
 
 Phase 5 ✅ Gateway & Security
   └── API Gateway (Python, routing, JWT via Keycloak, rate limiting)

@@ -26,18 +26,29 @@ def parse_llm_json(text: str) -> Optional[dict]:
     if clean.startswith("```"):
         clean = clean.split("\n", 1)[1] if "\n" in clean else ""
         clean = clean.rsplit("```", 1)[0]
-    try:
-        data = json.loads(clean)
-    except json.JSONDecodeError:
+    data = _loads(clean)
+    if data is None:
         # Fall back to the outermost {...} in case the model added prose around it
         start, end = clean.find("{"), clean.rfind("}")
         if start == -1 or end <= start:
             return None
-        try:
-            data = json.loads(clean[start:end + 1])
-        except json.JSONDecodeError:
-            return None
+        data = _loads(clean[start:end + 1])
     return data if isinstance(data, dict) else None
+
+
+_TRAILING_COMMA = re.compile(r",(\s*[}\]])")
+
+
+def _loads(text: str):
+    """json.loads, retrying once without trailing commas (a common LLM mistake: `[{...},]`)."""
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    try:
+        return json.loads(_TRAILING_COMMA.sub(r"\1", text))
+    except json.JSONDecodeError:
+        return None
 
 
 def _normalize(name: str) -> str:

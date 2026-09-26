@@ -39,7 +39,7 @@ Because the services run on the host, Prometheus scrapes them at `host.docker.in
 Defaults in each `config.py` point at `localhost`. Useful flags:
 - `api-gateway`: `AUTH_ENABLED=false` by default (JWT checks are skipped).
 - `notification-service`: `EMAIL_ENABLED=false` by default (no real SMTP).
-- `ai-service`: `LLM_PROVIDER` defaults to `groq` (other options are `gemini` and `ollama`). `app/llm/factory.py` creates the client at import time, so an unknown provider fails on startup.
+- `ai-service`: `LLM_PROVIDER` defaults to `groq` (other options are `gemini` and `ollama`), with `GROQ_MODEL=openai/gpt-oss-120b`. Groq retires models: a 404 `model_not_found` means you should pick one from `GET https://api.groq.com/openai/v1/models`. `app/llm/factory.py` creates the client at import time, so an unknown provider fails on startup.
 
 ## Testing
 
