@@ -6,6 +6,7 @@ import com.ecommerce.search.repository.ProductSearchRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -14,7 +15,8 @@ import org.springframework.data.elasticsearch.core.SearchHit;
 import org.springframework.data.elasticsearch.core.SearchHits;
 // import org.springframework.data.elasticsearch.core.SearchHitsImpl;
 // import org.springframework.data.elasticsearch.core.TotalHitsRelation;
-// import org.springframework.data.elasticsearch.core.query.CriteriaQuery;
+import org.springframework.data.elasticsearch.core.query.Criteria;
+import org.springframework.data.elasticsearch.core.query.CriteriaQuery;
 
 import java.util.List;
 import java.util.Optional;
@@ -150,6 +152,33 @@ class SearchServiceTest {
         List<String> suggestions = searchService.autocomplete("iPh");
 
         assertEquals(1, suggestions.size());
+    }
+
+    @Test
+    void autocomplete_multiWordMatchesEachWordWithoutWhitespace() {
+        // Criteria.contains() can't take whitespace ("Cannot constructQuery"), so each word gets its own criterion
+        SearchHits<Product> hits = mockSearchHits(List.of(sampleProduct));
+        when(elasticsearchOperations.search(any(Query.class), eq(Product.class)))
+                .thenReturn(hits);
+
+        List<String> suggestions = searchService.autocomplete("  iPhone   15 ");
+
+        ArgumentCaptor<Query> captor = ArgumentCaptor.forClass(Query.class);
+        verify(elasticsearchOperations).search(captor.capture(), eq(Product.class));
+        List<Criteria> chain = ((CriteriaQuery) captor.getValue()).getCriteria().getCriteriaChain();
+        List<Object> values = chain.stream()
+                .flatMap(c -> c.getQueryCriteriaEntries().stream())
+                .map(Criteria.CriteriaEntry::getValue)
+                .toList();
+        assertEquals(List.of("iPhone", "15"), values);
+        assertTrue(chain.stream().allMatch(c -> "name".equals(c.getField().getName())));
+        assertEquals(List.of("iPhone 15 Pro"), suggestions);
+    }
+
+    @Test
+    void autocomplete_blankQueryReturnsEmptyWithoutSearching() {
+        assertTrue(searchService.autocomplete("   ").isEmpty());
+        verifyNoInteractions(elasticsearchOperations);
     }
 
     // ─── filter ─────────────────────────────────────────────────────────────
