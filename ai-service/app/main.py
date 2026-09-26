@@ -4,6 +4,8 @@ from fastapi import FastAPI
 from app.config import settings
 from app.routes.ai_routes import router as ai_router
 from app.kafka.consumer import start_consumer
+from app.kafka.cache_invalidator import start_cache_invalidator
+from app.cache import redis_cache
 from prometheus_fastapi_instrumentator import Instrumentator
 from app.logging_config import setup_logging
 from app.tracing_config import setup_tracing
@@ -14,16 +16,19 @@ setup_logging("ai-service")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     consumer_task = asyncio.create_task(start_consumer())
+    invalidator_task = asyncio.create_task(start_cache_invalidator())
     print(f"✅ {settings.APP_NAME} started — LLM provider: {settings.LLM_PROVIDER}")
     print(f"📡 Kafka consumer background task started")
 
     yield
 
-    consumer_task.cancel()
-    try:
-        await consumer_task
-    except asyncio.CancelledError:
-        pass
+    for task in (consumer_task, invalidator_task):
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+    await redis_cache.close()
     print("🔌 AI Service shut down")
 
 

@@ -9,7 +9,7 @@ def get_llm_client() -> LLMClient:
     """
     Factory function that returns the configured LLM client.
     To swap providers, change LLM_PROVIDER in .env:
-      - "groq"    → Groq / Llama 3.3 70B (default)
+      - "groq"    → Groq / GPT-OSS 120B (default)
       - "gemini"  → Google Gemini (free tier)
       - "ollama"  → Ollama (local)
     """

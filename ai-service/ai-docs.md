@@ -2,7 +2,7 @@
 
 ## Overview
 
-The AI Service is the fifth microservice in the FastAPI Microservices project. It provides AI-powered features for the e-commerce platform: a shopping assistant chatbot, product recommendations, natural language product search, and personalized email generation. It fetches real product data from the Product Service and uses a provider-agnostic LLM abstraction layer that supports Google Gemini, Groq (Llama 3.3 70B), and Ollama (local).
+The AI Service is the fifth microservice in the FastAPI Microservices project. It provides AI-powered features for the e-commerce platform: a shopping assistant chatbot, product recommendations, natural language product search, and personalized email generation. It fetches real product data from the Product Service and uses a provider-agnostic LLM abstraction layer that supports Google Gemini, Groq (GPT-OSS 120B), and Ollama (local).
 
 ---
 
@@ -12,10 +12,10 @@ The AI Service is the fifth microservice in the FastAPI Microservices project. I
 The AI Service uses an abstract `LLMClient` base class with concrete implementations for each provider. To switch from Groq to Gemini or Ollama, change one line in `.env` — no code changes required. This was a deliberate architecture decision to avoid vendor lock-in and to make the service resilient to provider outages or rate limit issues.
 
 ### Groq over Google Gemini (Primary Provider)
-Groq was selected as the primary provider because it offers a generous free tier (30 RPM on Llama 3.3 70B) with extremely fast inference. Google Gemini's free tier proved too restrictive during development — rapid Kafka event processing exhausted the daily quota quickly. Groq's rate limits are more forgiving for burst workloads.
+Groq was selected as the primary provider because it offers a generous free tier with extremely fast inference. Google Gemini's free tier proved too restrictive during development — rapid Kafka event processing exhausted the daily quota quickly. Groq's rate limits are more forgiving for burst workloads.
 
-### Llama 3.3 70B via Groq
-Llama 3.3 70B is Meta's open-source large language model. It runs on Groq's cloud infrastructure — the model itself is free and open-source, Groq provides the compute. The model is capable enough for structured JSON generation (recommendations, search results) and natural conversation (chatbot).
+### GPT-OSS 120B via Groq
+`openai/gpt-oss-120b` is OpenAI's open-weight model. It runs on Groq's cloud infrastructure — the model itself is open-weight, Groq provides the compute. The project originally used Llama 3.3 70B (`llama-3.3-70b-versatile`), but Groq retired it, and requests now fail with 404 `model_not_found`. Set `GROQ_MODEL` to any model your key lists at `GET https://api.groq.com/openai/v1/models`. The model is capable enough for structured JSON generation (recommendations, search results) and natural conversation (chatbot).
 
 ### httpx for LLM API Calls (No SDKs)
 All LLM providers are called via `httpx` REST calls rather than provider-specific SDKs (`google-generativeai`, `openai`, `groq`). This keeps dependencies minimal, maintains consistency with the rest of the project (which uses `httpx` for inter-service calls), and makes the provider abstraction cleaner — each client is just an HTTP wrapper.
@@ -24,7 +24,24 @@ All LLM providers are called via `httpx` REST calls rather than provider-specifi
 The AI Service calls the Product Service (`GET /api/products`) to fetch the real catalog before every LLM call. This means recommendations, search results, and chatbot responses reference actual products in the system rather than hallucinated ones. The product data is formatted into a text block and injected into the LLM's system prompt. `get_all_products()` walks every page of `/api/products` (page_size 100) so the LLM sees the whole catalog, not just the first page.
 
 ### Validated LLM Output
-The LLM is asked for JSON, but it can wrap it in markdown fences, add prose, or name products that don't exist. Recommendations and smart search pass every reply through `app/services/llm_output.py`: it extracts the JSON, matches each product name to the catalog (case- and whitespace-insensitive), and drops anything that doesn't match. The response's `id`, `price`, `category`, and `image_url` come from the catalog, never from the LLM; only the reason text comes from the model. If the reply has no valid JSON (including the providers' "temporarily busy" fallback), the endpoint returns **502** instead of a 200 with an error message inside. With an empty catalog, the endpoint returns an empty result and skips the LLM call.
+The LLM is asked for JSON, but it can wrap it in markdown fences, add prose, or name products that don't exist. Recommendations and smart search pass every reply through `app/services/llm_output.py`: it extracts the JSON (tolerating markdown fences, surrounding prose, and trailing commas), matches each product name to the catalog (case- and whitespace-insensitive), and drops anything that doesn't match. The response's `id`, `price`, `category`, and `image_url` come from the catalog, never from the LLM; only the reason text comes from the model. If the reply has no valid JSON (including the providers' "temporarily busy" fallback), the endpoint returns **502** instead of a 200 with an error message inside. With an empty catalog, the endpoint returns an empty result and skips the LLM call.
+
+### Redis Cache (Cache-Aside)
+`app/cache/redis_cache.py` caches on Redis DB 1 (notification-service uses DB 0):
+
+| What | Key | TTL | Used by |
+|---|---|---|---|
+| Product catalog | `ai:v<N>:catalog` | 15 min (`CACHE_CATALOG_TTL`) | All 4 features, via `services/catalog.py` |
+| Recommendation picks (`[{id, reason}]`) | `ai:v<N>:rec:<hash>` | 6 h (`CACHE_LLM_TTL`) | `/recommendations` |
+| Suggestion picks + tags/category | `ai:v<N>:suggest:<hash>` | 6 h | `/suggest` |
+
+- **Only IDs and reasons are cached**, not full products. On a hit, product details are filled in from the current catalog, so prices are never staler than the catalog, and deleted products drop out.
+- **Keys are normalized:** "iPhone 15" and " iphone  15 " hit the same entry.
+- **Invalidation:** `kafka/cache_invalidator.py` consumes `product-updated` in its own consumer group (`ai-service-group-cache`) and calls `invalidate()`, which bumps `ai:cache:version`. Every older key stops being read at once and expires on its TTL. A request that started before the change writes under the old version, so it can't put stale data in the new one.
+- **Not cached:** chat (depends on conversation history), empty results, and unparseable LLM replies (502). An empty catalog isn't cached either, so recovery from a Product Service outage is immediate.
+- **Graceful fallback:** every Redis call fails soft. On an error, the cache is bypassed for 30 seconds so requests don't each wait on a connect timeout. Set `CACHE_ENABLED=false` to turn it off.
+- **Metrics:** `ai_cache_requests_total{kind, result}` on `/metrics` (kind = catalog | rec | suggest, result = hit | miss).
+- **Limitation:** if Redis is unreachable when a `product-updated` event arrives, that invalidation is lost and old entries live out their TTL (at most 15 min for the catalog, 6 h for picks, but details still come from the catalog).
 
 ### Kafka Consumer + Producer
 The AI Service acts as both a Kafka consumer and producer. It consumes `order-placed` events, generates personalized email content via the LLM, and publishes the result to `ai-notification-ready` for the Notification Service to send. This creates a fully asynchronous AI personalization pipeline.
@@ -46,7 +63,7 @@ ai-service/
 │   │   ├── __init__.py
 │   │   ├── base.py                  # Abstract LLMClient interface
 │   │   ├── gemini_client.py         # Google Gemini implementation
-│   │   ├── groq_client.py          # Groq / Llama 3.3 70B implementation
+│   │   ├── groq_client.py          # Groq implementation (GROQ_MODEL, default gpt-oss-120b)
 │   │   ├── ollama_client.py        # Ollama local implementation
 │   │   └── factory.py              # Returns configured client based on LLM_PROVIDER
 │   ├── clients/
@@ -61,10 +78,14 @@ ai-service/
 │   │   ├── recommendation.py        # Product recommendations from real catalog
 │   │   ├── suggestion.py            # Natural language product search
 │   │   ├── llm_output.py            # Parse LLM JSON, match picks to real catalog products
+│   │   ├── catalog.py               # Cached catalog (cache-aside over product_client)
 │   │   └── notification_ai.py       # Personalized email generation for orders
+│   ├── cache/
+│   │   └── redis_cache.py           # Versioned cache-aside Redis layer (DB 1)
 │   └── kafka/
 │       ├── __init__.py
 │       ├── consumer.py              # Consumes order-placed events
+│       ├── cache_invalidator.py     # Consumes product-updated, invalidates the cache
 │       └── producer.py              # Publishes ai-notification-ready events
 ├── tests/
 │   ├── __init__.py
@@ -72,8 +93,9 @@ ai-service/
 │       ├── __init__.py
 │       ├── test_llm_clients.py      # 13 tests — all 3 LLM providers
 │       ├── test_ai_services.py      # 20 tests — chatbot, recommendations, suggestion, notification
-│       ├── test_llm_output.py       # 13 tests — JSON parsing and catalog matching
+│       ├── test_llm_output.py       # 15 tests — JSON parsing and catalog matching
 │       ├── test_ai_routes.py        # 3 tests — response shapes and 502 on invalid LLM output
+│       ├── test_redis_cache.py      # 19 tests — cache primitives, fallback, catalog/LLM caching, invalidator
 │       ├── test_product_client.py   # 13 tests — product fetching, pagination, and formatting
 │       ├── test_env_example.py      # 3 tests — .env.example matches Settings
 │       └── test_kafka.py            # 3 tests — order-placed handler
@@ -102,7 +124,7 @@ ai-service/
    │              │ │              │ │              │
    │ Google API   │ │ Groq API     │ │ localhost    │
    │ Free tier    │ │ Free tier    │ │ No API key   │
-   │ 15 RPM       │ │ 30 RPM       │ │ Unlimited    │
+   │ 15 RPM       │ │ per-model RPM│ │ Unlimited    │
    └──────────────┘ └──────────────┘ └──────────────┘
 
    factory.py reads LLM_PROVIDER from .env
@@ -113,7 +135,7 @@ ai-service/
 
 Change one line in `.env`:
 ```
-LLM_PROVIDER=groq      # Groq / Llama 3.3 70B (current)
+LLM_PROVIDER=groq      # Groq / GPT-OSS 120B (current)
 LLM_PROVIDER=gemini    # Google Gemini
 LLM_PROVIDER=ollama    # Ollama (local, no API key)
 ```
@@ -318,11 +340,11 @@ A 5-second delay between Kafka messages prevents LLM rate limit exhaustion from 
 | Suggestion | Returns catalog matches with catalog prices, includes query in prompt, 502 on invalid LLM reply, empty catalog skips LLM |
 | Notification AI | Returns subject + body, includes customer in prompt, malformed response, markdown-fenced JSON, empty catalog |
 
-### `test_llm_output.py` — 13 tests
+### `test_llm_output.py` — 15 tests
 
 | Area | Tests |
 |---|---|
-| parse_llm_json | Plain JSON, markdown fences, surrounding prose, non-JSON, empty, array, broken JSON |
+| parse_llm_json | Plain JSON, markdown fences, surrounding prose, trailing commas, comma fallback leaves valid JSON alone, non-JSON, empty, array, broken JSON |
 | match_products | Catalog fields only, case/whitespace-insensitive, drops unknown/malformed items, dedupes in LLM order, non-list input, first duplicate name wins |
 
 ### `test_ai_routes.py` — 3 tests
@@ -330,6 +352,17 @@ A 5-second delay between Kafka messages prevents LLM rate limit exhaustion from 
 | Area | Tests |
 |---|---|
 | Routes | Structured recommendations response, structured suggest response, 502 passthrough |
+
+### `test_redis_cache.py` — 19 tests
+
+Uses an in-memory `FakeRedis`. `tests/conftest.py` has an autouse fixture that disables the cache everywhere else, so no test touches a real Redis.
+
+| Area | Tests |
+|---|---|
+| Primitives | Round trip + TTL, normalized keys, distinct keys, invalidate changes keys, miss, corrupt value, disabled no-op, `CACHE_ENABLED=false`, Redis down fails soft + backs off |
+| Catalog | Fetched once then cached, empty not cached, refetched after invalidate |
+| Recommendations / suggest | Hit skips LLM and shows current price, deleted product dropped, empty result not cached, invalid reply not cached, stores only ids + reasons, suggest hit matches miss |
+| Invalidator | One invalidate per event, own consumer group |
 
 ### `test_product_client.py` — 13 tests
 
@@ -398,7 +431,7 @@ OPENAI_MODEL=gpt-4o
 
 # Groq
 GROQ_API_KEY=your-groq-api-key
-GROQ_MODEL=llama-3.3-70b-versatile
+GROQ_MODEL=openai/gpt-oss-120b
 
 # Ollama (local)
 OLLAMA_BASE_URL=http://localhost:11434

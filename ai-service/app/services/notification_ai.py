@@ -1,5 +1,6 @@
 from app.llm.factory import llm_client
-from app.clients.product_client import get_all_products, format_products_for_context
+from app.clients.product_client import format_products_for_context
+from app.services.catalog import get_catalog
 
 
 SYSTEM_PROMPT = """You are an email copywriter for our e-commerce store.
@@ -26,7 +27,7 @@ async def personalize_notification(event: dict) -> dict:
     Generate a personalized follow-up email based on order details.
     Returns dict with 'subject' and 'body_html' keys.
     """
-    products = await get_all_products()
+    products = await get_catalog()
     catalog = format_products_for_context(products)
     system = SYSTEM_PROMPT.format(catalog=catalog)
 

@@ -26,18 +26,29 @@ def parse_llm_json(text: str) -> Optional[dict]:
     if clean.startswith("```"):
         clean = clean.split("\n", 1)[1] if "\n" in clean else ""
         clean = clean.rsplit("```", 1)[0]
-    try:
-        data = json.loads(clean)
-    except json.JSONDecodeError:
+    data = _loads(clean)
+    if data is None:
         # Fall back to the outermost {...} in case the model added prose around it
         start, end = clean.find("{"), clean.rfind("}")
         if start == -1 or end <= start:
             return None
-        try:
-            data = json.loads(clean[start:end + 1])
-        except json.JSONDecodeError:
-            return None
+        data = _loads(clean[start:end + 1])
     return data if isinstance(data, dict) else None
+
+
+_TRAILING_COMMA = re.compile(r",(\s*[}\]])")
+
+
+def _loads(text: str):
+    """json.loads, retrying once without trailing commas (a common LLM mistake: `[{...},]`)."""
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    try:
+        return json.loads(_TRAILING_COMMA.sub(r"\1", text))
+    except json.JSONDecodeError:
+        return None
 
 
 def _normalize(name: str) -> str:
@@ -80,3 +91,28 @@ def match_products(items: list, index: dict[str, dict], reason_key: str) -> list
         entry[reason_key] = reason if isinstance(reason, str) else ""
         matched.append(entry)
     return matched
+
+
+def to_picks(matched: list[dict], reason_key: str) -> list[dict]:
+    """Reduce matched products to what the cache stores: id + LLM reason."""
+    return [{"id": m["id"], reason_key: m[reason_key]} for m in matched if m.get("id")]
+
+
+def hydrate_picks(picks: list, products: list[dict], reason_key: str) -> list[dict]:
+    """
+    Rebuild full entries from cached picks using the current catalog, so prices
+    are never older than the catalog. Picks whose product is gone are dropped.
+    """
+    by_id = {p["id"]: p for p in products if p.get("id")}
+    result: list[dict] = []
+    for pick in picks if isinstance(picks, list) else []:
+        if not isinstance(pick, dict):
+            continue
+        product = by_id.get(pick.get("id"))
+        if product is None:
+            continue
+        entry = {field: product.get(field) for field in PRODUCT_FIELDS}
+        reason = pick.get(reason_key)
+        entry[reason_key] = reason if isinstance(reason, str) else ""
+        result.append(entry)
+    return result

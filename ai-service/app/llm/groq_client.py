@@ -8,7 +8,7 @@ class GroqClient(LLMClient):
     """
     Groq LLM client using the REST API.
     Groq uses OpenAI-compatible API format, making it easy to swap.
-    Free tier: 30 RPM on Llama 3.3 70B.
+    Model: GROQ_MODEL (default openai/gpt-oss-120b). Free-tier rate limits are per model; see console.groq.com.
     """
 
     BASE_URL = "https://api.groq.com/openai/v1/chat/completions"

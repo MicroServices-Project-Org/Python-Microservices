@@ -2,9 +2,12 @@ import logging
 
 from fastapi import HTTPException
 
+from app.cache import redis_cache
+from app.config import settings
 from app.llm.factory import llm_client
-from app.clients.product_client import get_all_products, format_products_for_context
-from app.services.llm_output import parse_llm_json, build_catalog_index, match_products
+from app.clients.product_client import format_products_for_context
+from app.services.catalog import get_catalog
+from app.services.llm_output import parse_llm_json, build_catalog_index, match_products, to_picks, hydrate_picks
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +19,7 @@ that a customer might also be interested in.
 Respond in this exact JSON format and nothing else:
 {{
   "recommendations": [
-    {{"name": "Product Name", "reason": "Brief reason why this is recommended"}},
+    {{"name": "Product Name", "reason": "Brief reason why this is recommended"}}
   ]
 }}
 
@@ -33,10 +36,17 @@ async def get_recommendations(product_name: str = "", category: str = "") -> lis
     Generate product recommendations based on a product name and/or category.
     Returns catalog products the LLM picked (id, name, price, category, image_url, reason).
     Products the LLM invented are dropped. Raises 502 if the LLM reply isn't valid JSON.
+    The LLM's picks (ids + reasons) are cached; product details always come from the current catalog.
     """
-    products = await get_all_products()
+    products = await get_catalog()
     if not products:
         return []  # Nothing to recommend from; don't spend an LLM call
+
+    key = await redis_cache.make_key("rec", product_name, category)
+    cached = await redis_cache.get_json(key, kind="rec")
+    if cached is not None:
+        return hydrate_picks(cached, products, "reason")
+
     catalog = format_products_for_context(products)
     system = SYSTEM_PROMPT.format(catalog=catalog)
 
@@ -50,7 +60,10 @@ async def get_recommendations(product_name: str = "", category: str = "") -> lis
     response = await llm_client.generate(prompt=prompt, system_prompt=system)
     data = parse_llm_json(response)
     if data is None:
-        logger.error("Unparseable LLM recommendation reply: %.200r", response)
+        logger.error("Unparseable LLM recommendation reply: %.1000r", response)
         raise HTTPException(status_code=502, detail="AI service returned an invalid response. Please try again.")
 
-    return match_products(data.get("recommendations", []), build_catalog_index(products), reason_key="reason")
+    matched = match_products(data.get("recommendations", []), build_catalog_index(products), reason_key="reason")
+    if matched:  # Don't pin an empty answer for 6h
+        await redis_cache.set_json(key, to_picks(matched, "reason"), settings.CACHE_LLM_TTL)
+    return matched
