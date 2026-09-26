@@ -55,7 +55,16 @@ public class SearchService {
     public List<String> autocomplete(String prefix) {
         log.info("✨ Autocomplete for: {}", prefix);
 
-        Criteria criteria = new Criteria("name").contains(prefix);
+        // Criteria.contains() builds a wildcard query and rejects values with whitespace,
+        // so "iPhone 15" used to fail with a 500. Match each word instead (all must match).
+        String[] words = prefix == null ? new String[0] : prefix.trim().split("\\s+");
+        if (words.length == 0 || words[0].isEmpty()) {
+            return List.of();
+        }
+        Criteria criteria = new Criteria("name").contains(words[0]);
+        for (int i = 1; i < words.length; i++) {
+            criteria = criteria.and(new Criteria("name").contains(words[i]));
+        }
         CriteriaQuery searchQuery = new CriteriaQuery(criteria);
         SearchHits<Product> hits = elasticsearchOperations.search(searchQuery, Product.class);
 
