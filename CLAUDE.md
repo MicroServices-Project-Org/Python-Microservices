@@ -84,4 +84,4 @@ mvn test -Dtest=DiffReconcileJobTest
 - Tables are created by `Base.metadata.create_all` in `lifespan`. There are no migrations, so a schema change on an existing table needs a manual `ALTER` or a dropped volume.
 - Use Homebrew Python 3.12, not Anaconda (it breaks the asyncio loop). Search needs Java 21 exactly, because Mockito/Byte Buddy fails on newer JDKs.
 - Per-service doc filenames aren't uniform (`ai-service/ai-docs.md`, `api-gateway/gw-docs.md`). Use the README's "Service Documentation" table as the index, and update it if you add or rename a doc. Notification has no doc yet.
-- `KNOWN_ISSUES.md` lists open mismatches between the code and the docs. Update it when you fix one.
+- `KNOWN_ISSUES.md` lists open bugs, code/doc mismatches, and the infra roadmap. When you fix an issue, replace its write-up with a row in the Fixed table (with the PR number), and don't renumber the rest.

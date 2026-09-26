@@ -1,44 +1,14 @@
 # Known Issues & TODOs
 
-The first part lists places where the code and the docs disagree, found while writing `CLAUDE.md` (2026-09-25). The second part is the infrastructure roadmap, checked against the repo on the same date.
+Open bugs and code/doc mismatches come first, then fixed issues, then the infrastructure roadmap. All were last checked against the repo on 2026-09-26. Issue numbers are stable: when an issue is fixed, its write-up moves into the Fixed table with a PR link, and the other issues keep their numbers.
+
+# Open Issues
 
 ## 1. AI Service Redis cache is documented but not implemented
 
 - **Where:** `README.md` (Project Structure, "Redis Caching (Cache-Aside)", Resilience Patterns, Resume Highlights) vs `ai-service/app/`
 - **Problem:** The README describes `ai-service/app/cache/redis_cache.py`: a cache-aside layer on Redis DB 1 with a 6h TTL for LLM product IDs, a 15min TTL for catalog data, and a graceful fallback. That module doesn't exist, and nothing in `ai-service/app` imports or uses Redis. `git log -S redis_cache` finds no commit that ever added it.
 - **Fix:** Implement the cache (and add `redis` to `ai-service/requirements.txt`), or remove the claims from the README.
-
-## 2. Two reconcile jobs run in Search Service · ✅ fixed 2026-09-26
-
-> `ReconciliationJob.java` was deleted. It was a line-for-line copy of `DiffReconcileJob` (only the Javadoc differed) and had no tests. Spring's default single-thread scheduler ran the two back-to-back, not concurrently, so every 30 minutes the full Product Service fetch and ES re-index happened twice. `DiffReconcileJob` and its config keys are unchanged.
-
-- **Where:** `search-service/src/main/java/com/ecommerce/search/scheduler/`
-- **Problem:** `ReconciliationJob` and `DiffReconcileJob` are both `@Component`s. Each has `@Scheduled(fixedDelayString = "${reconciliation.interval.ms:1800000}")` and is gated by the same `reconciliation.enabled` flag, so both run every cycle. That means twice the reads from Product Service and Elasticsearch, and two jobs writing to ES at the same time. Only `DiffReconcileJob` has tests (`DiffReconcileJobTest`), and the README mentions only `DiffReconcileJob`.
-- **Fix:** Delete `ReconciliationJob.java` if it's superseded, or give it its own enable flag.
-
-## 3. Broken README links in "Service Documentation" · ✅ fixed 2026-09-26
-
-> Links now point to `ai-docs.md` and `gw-docs.md`. The search doc was renamed to `search-service/search-service-docs.md`. The notification row says there's no doc yet, and the Order row also links `resilience-docs.md`. A repo-wide check finds no broken relative `.md` links.
-
-- **Where:** `README.md` → "📝 Service Documentation" table
-- **Problem:** Several links point to files that don't exist:
-
-  | README link | Actual file |
-  |---|---|
-  | `ai-service/ai-service-docs.md` | `ai-service/ai-docs.md` |
-  | `api-gateway/api-gateway-docs.md` | `api-gateway/gw-docs.md` |
-  | `search-service/search-service-docs.md` | `search-service/serarch-services-documentation.md` (typo in filename) |
-  | `notification-service/notification-docs.md` | *(no doc file exists)* |
-
-- **Fix:** Update the links, rename the search doc to fix the typo, and add a notification-service doc or drop that row.
-
-## 4. AI Service defaults to Gemini, but the docs say Groq · ✅ fixed 2026-09-26
-
-> The default is now `groq`. Factory and base-class docs list `groq, gemini, ollama`. The 45 AI tests pass with and without `.env`. The unused `OPENAI_*` settings were removed from `config.py`. Settings forbid unknown keys, so any local `ai-service/.env` must drop or comment out `OPENAI_API_KEY`/`OPENAI_MODEL`, or startup fails.
-
-- **Where:** `ai-service/app/config.py` (`LLM_PROVIDER: str = "gemini"`) vs `README.md`
-- **Problem:** The README says Groq/Llama 3.3 is the current provider and lists moving off Gemini (daily rate-limit exhaustion) as a fix. If `.env` doesn't set `LLM_PROVIDER`, the service still starts on Gemini. Also, the docstring and error message in `app/llm/factory.py` list `openai` as supported and call Groq "future". Neither is true: there is no OpenAI client, and Groq is implemented.
-- **Fix:** Change the default to `"groq"` and update the text in `factory.py` so the supported providers are `gemini, groq, ollama`.
 
 ## 5. Unit tests depend on the developer's local `.env`
 
@@ -47,11 +17,20 @@ The first part lists places where the code and the docs disagree, found while wr
 - **Workaround:** `AUTH_ENABLED=false pytest`.
 - **Fix:** add a `tests/conftest.py` that isolates settings, e.g. by setting the env vars tests rely on, or by patching `settings` to known values, so results don't depend on the local `.env`.
 
+# Fixed Issues
+
+| # | Issue | PR |
+|---|---|---|
+| 2 | Duplicate `ReconciliationJob` in Search Service ran every sync twice | #25 |
+| 3 | Broken links in the README's "Service Documentation" table | #24 |
+| 4 | AI Service defaulted to Gemini instead of Groq, and `factory.py` listed an OpenAI provider that didn't exist | #22 |
+| — | Keycloak healthcheck never passed (no `curl` in image, wrong port, health endpoints disabled) | #26 |
+
 ---
 
 # Roadmap / TODOs
 
-Do these in order. Each step depends on the ones before it. The status of each was checked against the repo on 2026-09-25.
+Do these in order. Each step depends on the ones before it. The status of each was last checked against the repo on 2026-09-26.
 
 ## TODO 1 — Named volumes in Docker Compose · *mostly done*
 
@@ -69,12 +48,12 @@ Do these in order. Each step depends on the ones before it. The status of each w
 **Status:** compose only defines infrastructure. Every service has a Dockerfile, but they have the problems below.
 
 **Blockers found:**
-- [x] **No `.dockerignore` anywhere.** Fixed: each Python service now has a `.dockerignore` excluding `.env*`, `venv/`, `tests/`, and caches. Still worth switching `api-gateway`, `notification-service`, and `ai-service` from `COPY . .` to the multi-stage `COPY app/ ./app/` pattern for consistency.
+- [x] **No `.dockerignore` anywhere.** Fixed in #23: each Python service now has a `.dockerignore` excluding `.env*`, `venv/`, `tests/`, and caches. Still worth switching `api-gateway`, `notification-service`, and `ai-service` from `COPY . .` to the multi-stage `COPY app/ ./app/` pattern for consistency.
 - [ ] **The search-service Dockerfile needs a prebuilt jar** (`COPY target/search-service-1.0.0.jar`). `docker compose build` fails on a clean checkout. Convert it to a multi-stage Maven build.
 - [ ] **Hostnames:** every `config.py` and `application.yml` defaults to `localhost`. Set env overrides in compose, e.g. `MONGO_HOST=mongodb`, `POSTGRES_HOST=postgres`, `POSTGRES_PORT=5432` (internal port, not 5433), `KAFKA_BOOTSTRAP_SERVERS=kafka:29092` (internal listener), `REDIS_HOST=redis`, service URLs such as `http://inventory-service:8003`, `OTLP_ENDPOINT=http://tempo:4317`, and for search `SPRING_ELASTICSEARCH_URIS`, `SPRING_KAFKA_BOOTSTRAP_SERVERS`, and `PRODUCT_SERVICE_URL`.
 - [ ] **Log path:** `logging_config.py` resolves `LOG_DIR` to `/logs` inside the container. Set `LOG_DIR` and mount `./logs`, or drop the file handler in containers and let Promtail read Docker stdout. Promtail's Docker scrape is currently broken (API version 1.42 is too old), so upgrading Promtail may be required.
 - [ ] **Prometheus targets** point at `host.docker.internal:<port>`. Change them to service names, or keep a separate config for host mode.
-- [ ] **Startup ordering:** use `depends_on: condition: service_healthy` on Postgres, Mongo, and Kafka. Keycloak's healthcheck curls port `8081` inside the container, where it listens on `8080`, so it never passes.
+- [ ] **Startup ordering:** use `depends_on: condition: service_healthy` on Postgres, Mongo, Kafka, and Keycloak. The Keycloak healthcheck works now (#26).
 - [ ] **Secrets:** pass `GROQ_API_KEY` and SMTP credentials from the root `.env` or an `env_file:`. Don't bake them into images.
 - [ ] Add the app services to `REQUIRED_SERVICES` in `docker-validate.yml`.
 
@@ -111,7 +90,7 @@ Depends on TODO 4.
 Depends on TODO 4. **Some services break or misbehave when scaled beyond one replica. Fix these first:**
 - [ ] **Order Service outbox worker:** every replica runs `start_outbox_worker()`, and `_process_pending_events()` selects PENDING rows without locking. Two pods will publish the same event twice. Use `SELECT … FOR UPDATE SKIP LOCKED` (`.with_for_update(skip_locked=True)`), or run the worker as a separate single-replica Deployment.
 - [ ] **Gateway rate limiting:** slowapi's `Limiter` in `api-gateway/app/middleware/rate_limit.py` uses in-memory storage, so each pod counts separately and the effective limit becomes N × 60/min. Point it at Redis (`storage_uri="redis://…"`).
-- [ ] **Search reconcile jobs:** every replica runs the `@Scheduled` jobs, and so far two of them (see Issue 2). Add ShedLock, or run reconciliation as a Kubernetes CronJob.
+- [ ] **Search reconcile job:** every replica runs the `@Scheduled` `DiffReconcileJob`. Add ShedLock, or run reconciliation as a Kubernetes CronJob.
 - [ ] **Kafka consumer scaling:** topics are auto-created with 1 partition by default, so extra consumer replicas of notification, AI, or search sit idle. Pre-create topics with more partitions, or set `KAFKA_NUM_PARTITIONS`.
 - [ ] Then set CPU requests and limits on each Deployment, install metrics-server on kind, and add HPAs for `api-gateway`, `product-service`, `order-service`, and `search-service`. Use a load generator (k6/hey) against `:9000` to show scaling, and add a Grafana panel for replica count.
 
@@ -123,4 +102,4 @@ Depends on TODO 5.
 - [ ] Push images to ECR. Extend `.github/workflows/ci.yml` to build and push on merge to `main`, which also finishes the "build → deploy" part of Phase 9 in the README.
 - [ ] Store secrets in AWS Secrets Manager via External Secrets Operator, not plain k8s Secrets in git.
 - [ ] Decide between managed services (RDS, MSK, OpenSearch, ElastiCache) and in-cluster StatefulSets. Managed is more realistic but costs more. Plan to tear everything down to control cost.
-- [ ] Keycloak needs a real database (not `dev-mem`) and `start` instead of `start-dev` for production mode.
+- [ ] Keycloak needs a real database (not `dev-file`) and `start` instead of `start-dev` for production mode.
