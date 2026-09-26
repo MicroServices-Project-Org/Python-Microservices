@@ -39,5 +39,16 @@ storage_config:
   filesystem:
     directory: /loki/chunks
 
+# Retention: without it Loki keeps every log line forever (the loki_data volume only grows).
+# The compactor deletes chunks older than retention_period.
+compactor:
+  working_directory: /loki/compactor
+  shared_store: filesystem
+  compaction_interval: 10m
+  retention_enabled: true
+  retention_delete_delay: 2h
+  retention_delete_worker_count: 50
+
 limits_config:
   reject_old_samples: true
+  retention_period: 168h   # 7 days

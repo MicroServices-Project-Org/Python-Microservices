@@ -218,7 +218,7 @@ Python-Microservices/
 │   │   └── dashboards/
 │   │       ├── dashboards.yml
 │   │       └── microservices-overview.json   # 5 panels: metrics + logs
-│   ├── loki/loki-config.yaml                 # Loki 2.9 with WAL fix
+│   ├── loki/loki-config.yaml                 # Loki 2.9 with WAL fix, 7-day retention
 │   ├── promtail/promtail-config.yaml         # Tails Docker + service log files
 │   └── tempo/tempo-config.yaml
 │
@@ -536,6 +536,11 @@ Every Python service emits **structured JSON logs** to both stdout and a file un
 ```
 
 Loki indexes by `service` and `level` labels (set in Promtail's pipeline_stages). Grafana queries like `{service="order-service", level="ERROR"}` work out of the box.
+
+**Disk usage is bounded at both ends:**
+- **Log files** rotate by size (`RotatingFileHandler`): 10 MB × 4 files = at most 40 MB per service. Promtail only tails `*.log`, so the rotated `.log.1`–`.log.3` aren't shipped twice. Override with the shell env vars `LOG_MAX_BYTES` / `LOG_BACKUP_COUNT` (not in `.env`: `Settings` rejects unknown keys).
+- **Loki** keeps 7 days (`retention_period: 168h`, applied by the compactor). Tempo (14 days) and Prometheus (15 days) use their defaults.
+- **Repeated aiokafka errors** during a Kafka outage are throttled to one line per message per 60s.
 
 ### 3. Distributed Traces
 
