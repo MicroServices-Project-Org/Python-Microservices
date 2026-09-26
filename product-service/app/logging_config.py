@@ -1,6 +1,8 @@
 import logging
 import os
 import sys
+import threading
+import time
 from pathlib import Path
 
 from opentelemetry import trace as _trace
@@ -8,6 +10,48 @@ from pythonjsonlogger import jsonlogger
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 LOG_DIR = Path(os.getenv("LOG_DIR", _PROJECT_ROOT / "logs"))
+
+# While Kafka is unreachable, aiokafka retries every ~100ms and logs each failure at ERROR,
+# which wrote ~700 MB/service to logs/ during an outage. Keep the first occurrence of each
+# message, then drop repeats for this many seconds and report how many were dropped.
+KAFKA_LOG_THROTTLE_SECONDS = 60
+
+
+class RepeatThrottleFilter(logging.Filter):
+    """Rate-limits repeated WARNING+ records from `prefix` loggers, keyed by logger + message template."""
+
+    def __init__(self, prefix: str = "aiokafka", window: float = KAFKA_LOG_THROTTLE_SECONDS):
+        super().__init__()
+        self.prefix = prefix
+        self.window = window
+        self._lock = threading.Lock()
+        self._last_emit: dict[tuple, float] = {}
+        self._suppressed: dict[tuple, int] = {}
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.levelno < logging.WARNING or not record.name.startswith(self.prefix):
+            return True
+        # Attached to several handlers: decide once per record, then reuse the decision
+        decision = getattr(record, "_throttle_keep", None)
+        if decision is not None:
+            return decision
+        record._throttle_keep = self._decide(record)
+        return record._throttle_keep
+
+    def _decide(self, record: logging.LogRecord) -> bool:
+        key = (record.name, record.levelno, str(record.msg))  # template, so changing args still match
+        now = time.monotonic()
+        with self._lock:
+            last = self._last_emit.get(key)
+            if last is not None and now - last < self.window:
+                self._suppressed[key] = self._suppressed.get(key, 0) + 1
+                return False
+            self._last_emit[key] = now
+            dropped = self._suppressed.pop(key, 0)
+        if dropped:
+            record.suppressed_repeats = dropped
+            record.msg = f"{record.msg} [{dropped} similar messages suppressed since the last one]"
+        return True
 
 
 def setup_logging(service_name: str, level: str = "INFO") -> None:
@@ -39,8 +83,10 @@ def setup_logging(service_name: str, level: str = "INFO") -> None:
             return True
 
     ctx_filter = ContextFilter()
-    stdout_handler.addFilter(ctx_filter)
-    file_handler.addFilter(ctx_filter)
+    throttle = RepeatThrottleFilter()  # one shared instance, so both handlers drop the same records
+    for handler in (stdout_handler, file_handler):
+        handler.addFilter(throttle)
+        handler.addFilter(ctx_filter)
 
     root_logger = logging.getLogger()
     root_logger.handlers = [stdout_handler, file_handler]

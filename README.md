@@ -835,6 +835,7 @@ A `POST /api/orders` produces ~18 spans across api-gateway, order-service, and i
 | CI failed: `No module named 'bson'` | requirements.txt missing transitive deps (motor→pymongo→bson) | Regenerated all 6 services' requirements.txt via `pip freeze` |
 | Order Service tests broke after outbox refactor | Tests patched `publish_order_placed` which no longer exists | Replaced with assertion that an Outbox row was added |
 | inventory-service tests had `ModuleNotFoundError: No module named 'app'` | pytest.ini missing `pythonpath = .` | Added to pytest.ini |
+| Kafka outage wrote ~700 MB of logs per service; consumers died silently; product-service wouldn't start | aiokafka retries every ~100ms and logs each failure at ERROR; consumers and producers made one connection attempt and gave up | `RepeatThrottleFilter` in `logging_config.py` (1 line per repeated aiokafka message per 60s, with a suppressed count); consumers and producers retry every 10s and recover without a restart |
 
 ---
 

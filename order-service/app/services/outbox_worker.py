@@ -4,7 +4,7 @@ from datetime import datetime, timezone, timedelta
 from sqlalchemy import select, delete
 from app.database import AsyncSessionLocal
 from app.models.outbox import Outbox, OutboxStatus
-from app.kafka.producer import publish_event
+from app.kafka.producer import publish_event, ensure_producer
 from app.config import settings
 
 
@@ -18,7 +18,10 @@ async def start_outbox_worker():
 
     while True:
         try:
-            await _process_pending_events()
+            # If Kafka was down at startup (or the producer never started), start it here,
+            # so PENDING events are delivered once Kafka is back without a service restart
+            if await ensure_producer():
+                await _process_pending_events()
             await _cleanup_old_events()
         except Exception as e:
             print(f"❌ Outbox worker error: {e}")
