@@ -30,6 +30,15 @@ class Settings(BaseSettings):
     KAFKA_GROUP_ID: str = "ai-service-group"
     KAFKA_ORDER_PLACED_TOPIC: str = "order-placed"
     KAFKA_AI_NOTIFICATION_TOPIC: str = "ai-notification-ready"
+    KAFKA_PRODUCT_UPDATED_TOPIC: str = "product-updated"  # any event invalidates the cache
+
+    # Redis cache (cache-aside). DB 1 so it doesn't mix with notification's idempotency keys in DB 0
+    CACHE_ENABLED: bool = True
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379
+    REDIS_DB: int = 1
+    CACHE_CATALOG_TTL: int = 900    # 15 min
+    CACHE_LLM_TTL: int = 21600      # 6 h: validated product IDs picked by the LLM
 
     model_config = ConfigDict(env_file=".env")
 

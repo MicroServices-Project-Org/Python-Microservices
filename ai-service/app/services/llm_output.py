@@ -80,3 +80,28 @@ def match_products(items: list, index: dict[str, dict], reason_key: str) -> list
         entry[reason_key] = reason if isinstance(reason, str) else ""
         matched.append(entry)
     return matched
+
+
+def to_picks(matched: list[dict], reason_key: str) -> list[dict]:
+    """Reduce matched products to what the cache stores: id + LLM reason."""
+    return [{"id": m["id"], reason_key: m[reason_key]} for m in matched if m.get("id")]
+
+
+def hydrate_picks(picks: list, products: list[dict], reason_key: str) -> list[dict]:
+    """
+    Rebuild full entries from cached picks using the current catalog, so prices
+    are never older than the catalog. Picks whose product is gone are dropped.
+    """
+    by_id = {p["id"]: p for p in products if p.get("id")}
+    result: list[dict] = []
+    for pick in picks if isinstance(picks, list) else []:
+        if not isinstance(pick, dict):
+            continue
+        product = by_id.get(pick.get("id"))
+        if product is None:
+            continue
+        entry = {field: product.get(field) for field in PRODUCT_FIELDS}
+        reason = pick.get(reason_key)
+        entry[reason_key] = reason if isinstance(reason, str) else ""
+        result.append(entry)
+    return result

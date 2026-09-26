@@ -2,9 +2,12 @@ import logging
 
 from fastapi import HTTPException
 
+from app.cache import redis_cache
+from app.config import settings
 from app.llm.factory import llm_client
-from app.clients.product_client import get_all_products, format_products_for_context
-from app.services.llm_output import parse_llm_json, build_catalog_index, match_products
+from app.clients.product_client import format_products_for_context
+from app.services.catalog import get_catalog
+from app.services.llm_output import parse_llm_json, build_catalog_index, match_products, to_picks, hydrate_picks
 
 logger = logging.getLogger(__name__)
 
@@ -37,10 +40,21 @@ async def suggest_products(query: str) -> dict:
     into matching products from the real catalog.
     Returns {"matches": [...], "search_tags": [...], "search_category": str | None}.
     Prices come from the catalog, not the LLM. Raises 502 if the LLM reply isn't valid JSON.
+    The LLM's picks are cached per normalized query; product details come from the current catalog.
     """
-    products = await get_all_products()
+    products = await get_catalog()
     if not products:
         return {"matches": [], "search_tags": [], "search_category": None}
+
+    key = await redis_cache.make_key("suggest", query)
+    cached = await redis_cache.get_json(key, kind="suggest")
+    if isinstance(cached, dict):
+        return {
+            "matches": hydrate_picks(cached.get("picks"), products, "match_reason"),
+            "search_tags": cached.get("search_tags") or [],
+            "search_category": cached.get("search_category"),
+        }
+
     catalog = format_products_for_context(products)
     system = SYSTEM_PROMPT.format(catalog=catalog)
 
@@ -54,8 +68,15 @@ async def suggest_products(query: str) -> dict:
 
     tags = data.get("search_tags")
     search_category = data.get("search_category")
-    return {
+    result = {
         "matches": match_products(data.get("matches", []), build_catalog_index(products), reason_key="match_reason"),
         "search_tags": [t for t in tags if isinstance(t, str)] if isinstance(tags, list) else [],
         "search_category": search_category if isinstance(search_category, str) and search_category else None,
     }
+    if result["matches"]:  # Don't pin an empty answer for 6h
+        await redis_cache.set_json(key, {
+            "picks": to_picks(result["matches"], "match_reason"),
+            "search_tags": result["search_tags"],
+            "search_category": result["search_category"],
+        }, settings.CACHE_LLM_TTL)
+    return result

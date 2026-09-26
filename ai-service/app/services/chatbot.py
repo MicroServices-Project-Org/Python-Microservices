@@ -1,5 +1,6 @@
 from app.llm.factory import llm_client
-from app.clients.product_client import get_all_products, format_products_for_context
+from app.clients.product_client import format_products_for_context
+from app.services.catalog import get_catalog
 
 
 SYSTEM_PROMPT = """You are a helpful shopping assistant for our e-commerce store.
@@ -19,7 +20,7 @@ async def chat(message: str, history: list[dict] = None) -> str:
     Shopping assistant chatbot.
     Fetches real product data and uses it as context for the LLM.
     """
-    products = await get_all_products()
+    products = await get_catalog()
     catalog = format_products_for_context(products)
     system = SYSTEM_PROMPT.format(catalog=catalog)
 

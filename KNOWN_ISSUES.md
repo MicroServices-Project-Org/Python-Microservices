@@ -4,16 +4,13 @@ Open bugs and code/doc mismatches come first, then fixed issues, then the infras
 
 # Open Issues
 
-## 1. AI Service Redis cache is documented but not implemented
-
-- **Where:** `README.md` (Project Structure, "Redis Caching (Cache-Aside)", Resilience Patterns, Resume Highlights) vs `ai-service/app/`
-- **Problem:** The README describes `ai-service/app/cache/redis_cache.py`: a cache-aside layer on Redis DB 1 with a 6h TTL for LLM product IDs, a 15min TTL for catalog data, and a graceful fallback. That module doesn't exist, and nothing in `ai-service/app` imports or uses Redis. `git log -S redis_cache` finds no commit that ever added it.
-- **Fix:** Implement the cache (and add `redis` to `ai-service/requirements.txt`), or remove the claims from the README.
+None right now.
 
 # Fixed Issues
 
 | # | Issue | PR |
 |---|---|---|
+| 1 | AI Service Redis cache was documented but not implemented. LLM output validation landed first in #28 | TBD |
 | 2 | Duplicate `ReconciliationJob` in Search Service ran every sync twice | #25 |
 | 3 | Broken links in the README's "Service Documentation" table | #24 |
 | 4 | AI Service defaulted to Gemini instead of Groq, and `factory.py` listed an OpenAI provider that didn't exist | #22 |
@@ -33,7 +30,7 @@ Do these in order. Each step depends on the ones before it. The status of each w
 **Remaining gaps:**
 - [x] **Keycloak:** fixed in PR #21, which switched to `KC_DB: dev-file` and mounted `keycloak_data:/opt/keycloak/data`.
 - [ ] **Elasticsearch:** no volume, so the index is rebuilt on restart. The reconcile job recovers it from Mongo within about 60s, so this is optional. Add `es_data:/usr/share/elasticsearch/data` if you want it to persist.
-- [ ] **Redis:** no volume, so notification idempotency keys are lost on restart. That could cause duplicate emails if Kafka redelivers. Add `redis_data:/data` and consider `--appendonly yes`.
+- [ ] **Redis:** no volume, so notification idempotency keys are lost on restart. That could cause duplicate emails if Kafka redelivers. (The AI cache in DB 1 is safe to lose, it just refills.) Add `redis_data:/data` and consider `--appendonly yes`.
 - [ ] **Kafka/Zookeeper:** no volumes, so topics and consumer offsets are lost on restart. Undelivered events are safe because of the outbox, but consumers with `auto-offset-reset: earliest` will replay messages.
 - [ ] If you add volumes, also add them to `REQUIRED_VOLUMES` in `.github/workflows/docker-validate.yml`.
 

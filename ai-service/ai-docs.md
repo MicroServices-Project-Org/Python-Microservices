@@ -26,6 +26,23 @@ The AI Service calls the Product Service (`GET /api/products`) to fetch the real
 ### Validated LLM Output
 The LLM is asked for JSON, but it can wrap it in markdown fences, add prose, or name products that don't exist. Recommendations and smart search pass every reply through `app/services/llm_output.py`: it extracts the JSON, matches each product name to the catalog (case- and whitespace-insensitive), and drops anything that doesn't match. The response's `id`, `price`, `category`, and `image_url` come from the catalog, never from the LLM; only the reason text comes from the model. If the reply has no valid JSON (including the providers' "temporarily busy" fallback), the endpoint returns **502** instead of a 200 with an error message inside. With an empty catalog, the endpoint returns an empty result and skips the LLM call.
 
+### Redis Cache (Cache-Aside)
+`app/cache/redis_cache.py` caches on Redis DB 1 (notification-service uses DB 0):
+
+| What | Key | TTL | Used by |
+|---|---|---|---|
+| Product catalog | `ai:v<N>:catalog` | 15 min (`CACHE_CATALOG_TTL`) | All 4 features, via `services/catalog.py` |
+| Recommendation picks (`[{id, reason}]`) | `ai:v<N>:rec:<hash>` | 6 h (`CACHE_LLM_TTL`) | `/recommendations` |
+| Suggestion picks + tags/category | `ai:v<N>:suggest:<hash>` | 6 h | `/suggest` |
+
+- **Only IDs and reasons are cached**, not full products. On a hit, product details are filled in from the current catalog, so prices are never staler than the catalog, and deleted products drop out.
+- **Keys are normalized:** "iPhone 15" and " iphone  15 " hit the same entry.
+- **Invalidation:** `kafka/cache_invalidator.py` consumes `product-updated` in its own consumer group (`ai-service-group-cache`) and calls `invalidate()`, which bumps `ai:cache:version`. Every older key stops being read at once and expires on its TTL. A request that started before the change writes under the old version, so it can't put stale data in the new one.
+- **Not cached:** chat (depends on conversation history), empty results, and unparseable LLM replies (502). An empty catalog isn't cached either, so recovery from a Product Service outage is immediate.
+- **Graceful fallback:** every Redis call fails soft. On an error, the cache is bypassed for 30 seconds so requests don't each wait on a connect timeout. Set `CACHE_ENABLED=false` to turn it off.
+- **Metrics:** `ai_cache_requests_total{kind, result}` on `/metrics` (kind = catalog | rec | suggest, result = hit | miss).
+- **Limitation:** if Redis is unreachable when a `product-updated` event arrives, that invalidation is lost and old entries live out their TTL (at most 15 min for the catalog, 6 h for picks, but details still come from the catalog).
+
 ### Kafka Consumer + Producer
 The AI Service acts as both a Kafka consumer and producer. It consumes `order-placed` events, generates personalized email content via the LLM, and publishes the result to `ai-notification-ready` for the Notification Service to send. This creates a fully asynchronous AI personalization pipeline.
 
@@ -61,10 +78,14 @@ ai-service/
 │   │   ├── recommendation.py        # Product recommendations from real catalog
 │   │   ├── suggestion.py            # Natural language product search
 │   │   ├── llm_output.py            # Parse LLM JSON, match picks to real catalog products
+│   │   ├── catalog.py               # Cached catalog (cache-aside over product_client)
 │   │   └── notification_ai.py       # Personalized email generation for orders
+│   ├── cache/
+│   │   └── redis_cache.py           # Versioned cache-aside Redis layer (DB 1)
 │   └── kafka/
 │       ├── __init__.py
 │       ├── consumer.py              # Consumes order-placed events
+│       ├── cache_invalidator.py     # Consumes product-updated, invalidates the cache
 │       └── producer.py              # Publishes ai-notification-ready events
 ├── tests/
 │   ├── __init__.py
@@ -74,6 +95,7 @@ ai-service/
 │       ├── test_ai_services.py      # 20 tests — chatbot, recommendations, suggestion, notification
 │       ├── test_llm_output.py       # 13 tests — JSON parsing and catalog matching
 │       ├── test_ai_routes.py        # 3 tests — response shapes and 502 on invalid LLM output
+│       ├── test_redis_cache.py      # 19 tests — cache primitives, fallback, catalog/LLM caching, invalidator
 │       ├── test_product_client.py   # 13 tests — product fetching, pagination, and formatting
 │       ├── test_env_example.py      # 3 tests — .env.example matches Settings
 │       └── test_kafka.py            # 3 tests — order-placed handler
@@ -330,6 +352,17 @@ A 5-second delay between Kafka messages prevents LLM rate limit exhaustion from 
 | Area | Tests |
 |---|---|
 | Routes | Structured recommendations response, structured suggest response, 502 passthrough |
+
+### `test_redis_cache.py` — 19 tests
+
+Uses an in-memory `FakeRedis`. `tests/conftest.py` has an autouse fixture that disables the cache everywhere else, so no test touches a real Redis.
+
+| Area | Tests |
+|---|---|
+| Primitives | Round trip + TTL, normalized keys, distinct keys, invalidate changes keys, miss, corrupt value, disabled no-op, `CACHE_ENABLED=false`, Redis down fails soft + backs off |
+| Catalog | Fetched once then cached, empty not cached, refetched after invalidate |
+| Recommendations / suggest | Hit skips LLM and shows current price, deleted product dropped, empty result not cached, invalid reply not cached, stores only ids + reasons, suggest hit matches miss |
+| Invalidator | One invalidate per event, own consumer group |
 
 ### `test_product_client.py` — 13 tests
 
