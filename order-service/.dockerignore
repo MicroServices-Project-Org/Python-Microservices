@@ -3,8 +3,8 @@
 .env.*
 venv/
 .venv/
-__pycache__/
-*.py[cod]
+**/__pycache__/
+**/*.py[cod]
 .pytest_cache/
 tests/
 postman-collection/
