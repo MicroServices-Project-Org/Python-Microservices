@@ -7,7 +7,7 @@ from app.config import settings
 from app.llm.factory import llm_client
 from app.clients.product_client import format_products_for_context
 from app.services.catalog import get_catalog
-from app.services.llm_output import parse_llm_json, build_catalog_index, match_products, to_picks, hydrate_picks
+from app.services.llm_output import parse_llm_json, build_catalog_index, match_products, to_picks, hydrate_picks, exclude_named
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ async def get_recommendations(product_name: str = "", category: str = "") -> lis
     """
     Generate product recommendations based on a product name and/or category.
     Returns catalog products the LLM picked (id, name, price, category, image_url, reason).
-    Products the LLM invented are dropped. Raises 502 if the LLM reply isn't valid JSON.
+    Products the LLM invented, and the queried product itself, are dropped. Raises 502 if the LLM reply isn't valid JSON.
     The LLM's picks (ids + reasons) are cached; product details always come from the current catalog.
     """
     products = await get_catalog()
@@ -45,7 +45,8 @@ async def get_recommendations(product_name: str = "", category: str = "") -> lis
     key = await redis_cache.make_key("rec", product_name, category)
     cached = await redis_cache.get_json(key, kind="rec")
     if cached is not None:
-        return hydrate_picks(cached, products, "reason")
+        # Filtered here too: entries cached before this filter existed can still hold the product
+        return exclude_named(hydrate_picks(cached, products, "reason"), product_name)
 
     catalog = format_products_for_context(products)
     system = SYSTEM_PROMPT.format(catalog=catalog)
@@ -56,6 +57,8 @@ async def get_recommendations(product_name: str = "", category: str = "") -> lis
     if category:
         prompt += f" in or related to the '{category}' category"
     prompt += " from our catalog."
+    if product_name:
+        prompt += f" Do not recommend '{product_name}' itself."
 
     response = await llm_client.generate(prompt=prompt, system_prompt=system)
     data = parse_llm_json(response)
@@ -64,6 +67,7 @@ async def get_recommendations(product_name: str = "", category: str = "") -> lis
         raise HTTPException(status_code=502, detail="AI service returned an invalid response. Please try again.")
 
     matched = match_products(data.get("recommendations", []), build_catalog_index(products), reason_key="reason")
+    matched = exclude_named(matched, product_name)  # The prompt asks for this, but models don't always comply
     if matched:  # Don't pin an empty answer for 6h
         await redis_cache.set_json(key, to_picks(matched, "reason"), settings.CACHE_LLM_TTL)
     return matched

@@ -1,4 +1,4 @@
-from app.services.llm_output import parse_llm_json, build_catalog_index, match_products
+from app.services.llm_output import parse_llm_json, build_catalog_index, match_products, exclude_named
 
 
 CATALOG = [
@@ -69,3 +69,20 @@ def test_catalog_index_first_duplicate_wins():
     index = build_catalog_index([{"id": "a", "name": "X"}, {"id": "b", "name": "x"}, {"id": "c"}])
     assert list(index) == ["x"]
     assert index["x"]["id"] == "a"
+
+
+# ─── exclude_named ───────────────────────────────────────────────────────────
+
+def test_exclude_named_is_case_and_whitespace_insensitive():
+    assert [e["id"] for e in exclude_named(CATALOG, "  iphone   15 PRO ")] == ["p2"]
+
+def test_exclude_named_needs_exact_name():
+    assert exclude_named(CATALOG, "iPhone") == CATALOG
+
+def test_exclude_named_empty_name_is_noop():
+    assert exclude_named(CATALOG, "") == CATALOG
+    assert exclude_named(CATALOG, "   ") == CATALOG
+
+def test_exclude_named_tolerates_missing_names():
+    entries = [{"id": "x", "name": None}, {"id": "y"}]
+    assert exclude_named(entries, "iPhone") == entries
