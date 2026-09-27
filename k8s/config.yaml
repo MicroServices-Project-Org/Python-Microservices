@@ -1,0 +1,24 @@
+# Container-network addresses shared by the Python services (loaded with envFrom).
+# Same role as the `environment:` overrides in docker-compose.yml. Settings only reads
+# env vars that match its fields, so each service ignores the keys it doesn't use.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+data:
+  KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+  MONGO_HOST: mongodb
+  MONGO_PORT: "27017"
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: "5432"
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  PRODUCT_SERVICE_URL: http://product-service:8001
+  ORDER_SERVICE_URL: http://order-service:8002
+  INVENTORY_SERVICE_URL: http://inventory-service:8003
+  AI_SERVICE_URL: http://ai-service:8005
+  SEARCH_SERVICE_URL: http://search-service:8006
+  # The file handler needs a writable dir; stdout is the log stream in k8s.
+  LOG_DIR: /tmp/logs
+  # No Tempo in the cluster yet, so spans are no-ops instead of failed exports.
+  OTEL_SDK_DISABLED: "true"

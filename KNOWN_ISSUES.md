@@ -69,16 +69,18 @@ Do these in order. Each step depends on the ones before it. The status of each w
 - [x] `logback-spring.xml` with `logstash-logback-encoder`: JSON with the Python field names, to stdout and `${LOG_DIR}/search-service.log` (10 MB x 3 rotation). Compose now mounts `./logs` for search too.
 - [x] Checked in Tempo: gateway → search is one trace; `POST /api/products` → `product-updated send` → search's `product-updated receive` is one trace (`spring.kafka.listener.observation-enabled`); each reconcile run is a root span whose `RestTemplate` call continues into product-service.
 
-## TODO 4 — Port to Kubernetes (kind) · *not started*
+## TODO 4 — Port to Kubernetes (kind) · *core done (#43); observability and Keycloak open*
 
-**Status:** no `k8s/` directory and no manifests. Depends on TODO 2 (working images).
+**Status:** `k8s/deploy.sh` runs the 7 services and their data stores on kind (see `k8s/README.md`). The e2e flow (24 checks) passes through the ingress on `localhost:8080`.
 
-- [ ] Deployment and Service for each of the 7 app services, with readiness and liveness probes on `/health` (`/actuator/health` for search).
-- [ ] StatefulSet and PVC for Postgres, Mongo, Elasticsearch, Kafka (consider KRaft to drop Zookeeper, or use the Strimzi operator), and Redis.
-- [ ] ConfigMaps for the hostnames and URLs from TODO 2, and Secrets for DB passwords, `GROQ_API_KEY`, and SMTP. Load images into kind with `kind load docker-image`.
-- [ ] Postgres init: mount `init-multiple-dbs.sh` from a ConfigMap. It must be executable, so set `defaultMode: 0755`.
-- [ ] Observability: deploy Prometheus with `kubernetes_sd_configs` or pod annotations instead of static targets. Loki and Promtail should read pod stdout, which makes the `./logs` file handler unnecessary.
-- [ ] Ingress (for example ingress-nginx) in front of `api-gateway`.
+- [x] Deployment and Service for each app, with probes on `/health`. Search uses Spring's `/actuator/health/{liveness,readiness}` groups, so an Elasticsearch outage doesn't restart it.
+- [x] StatefulSets with PVCs for Postgres, Mongo, Elasticsearch, Redis (AOF), and Kafka in **KRaft** mode (no Zookeeper).
+- [x] `app-config` ConfigMap for in-cluster hostnames, and the `app-secrets` Secret from the gitignored `k8s/secrets.env`. Images are loaded with `kind load docker-image`. Every Pod sets `enableServiceLinks: false` (CI checks it), because the injected `REDIS_PORT=tcp://...`-style variables break `Settings` and the Kafka image.
+- [x] Postgres init script mounted from a ConfigMap with `defaultMode: 0755`.
+- [x] Ingress in front of `api-gateway`, served by **Traefik** (ingress-nginx is archived).
+- [ ] Observability: Tempo (then drop `OTEL_SDK_DISABLED` and `MANAGEMENT_TRACING_ENABLED=false`), Prometheus with `kubernetes_sd_configs` or pod annotations, Loki + Promtail reading pod stdout (then the `LOG_DIR` file handler isn't needed), and Grafana.
+- [ ] Keycloak, so `AUTH_ENABLED=true` works in the cluster. The issuer URL must be the same for clients and the gateway, so serve Keycloak through the ingress too.
+- [ ] The gateway rate limit is shared by all clients: requests come from Traefik's pod IP, and slowapi keys on `request.client.host`. Key on `X-Forwarded-For` (trusting only the ingress) or move rate limiting into Traefik.
 
 ## TODO 5 — Helm chart (local + cloud values) · *not started*
 
@@ -94,6 +96,7 @@ Depends on TODO 4. **Some services break or misbehave when scaled beyond one rep
 - [ ] **Order Service outbox worker:** every replica runs `start_outbox_worker()`, and `_process_pending_events()` selects PENDING rows without locking. Two pods will publish the same event twice. Use `SELECT … FOR UPDATE SKIP LOCKED` (`.with_for_update(skip_locked=True)`), or run the worker as a separate single-replica Deployment.
 - [ ] **Gateway rate limiting:** slowapi's `Limiter` in `api-gateway/app/middleware/rate_limit.py` uses in-memory storage, so each pod counts separately and the effective limit becomes N × 60/min. Point it at Redis (`storage_uri="redis://…"`).
 - [ ] **Search reconcile job:** every replica runs the `@Scheduled` `DiffReconcileJob`. Add ShedLock, or run reconciliation as a Kubernetes CronJob.
+- [ ] **Schema creation on startup races:** order and inventory run `Base.metadata.create_all` in `lifespan`, and search's Spring Data repository creates the `products` index on startup. Two pods starting at once against an empty database or ES both try to create them, and one crashes (`UniqueViolationError` on `pg_type`, `resource_already_exists_exception`) before succeeding on restart. Seen on kind when two ReplicaSets overlapped. Move schema setup into an init Job or migrations (Alembic), and create the index once (or tolerate "already exists").
 - [ ] **Kafka consumer scaling:** topics are auto-created with 1 partition by default, so extra consumer replicas of notification, AI, or search sit idle. Pre-create topics with more partitions, or set `KAFKA_NUM_PARTITIONS`.
 - [ ] Then set CPU requests and limits on each Deployment, install metrics-server on kind, and add HPAs for `api-gateway`, `product-service`, `order-service`, and `search-service`. Use a load generator (k6/hey) against `:9000` to show scaling, and add a Grafana panel for replica count.
 

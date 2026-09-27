@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-service
+spec:
+  selector: {app: order-service}
+  ports:
+    - port: 8002
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: order-service}
+  template:
+    metadata:
+      labels: {app: order-service}
+    spec:
+      enableServiceLinks: false   # injected *_PORT=tcp://... vars would break Settings (e.g. REDIS_PORT)
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.36
+          command: ["sh", "-c", "until nc -z postgres 5432; do echo waiting for postgres; sleep 2; done"]
+      containers:
+        - name: order-service
+          image: ecommerce/order-service:dev
+          imagePullPolicy: Never   # loaded into kind by deploy.sh
+          ports:
+            - containerPort: 8002
+          envFrom:
+            - configMapRef: {name: app-config}
+          env:
+            - name: POSTGRES_USER
+              valueFrom: {secretKeyRef: {name: app-secrets, key: POSTGRES_USER}}
+            - name: POSTGRES_PASSWORD
+              valueFrom: {secretKeyRef: {name: app-secrets, key: POSTGRES_PASSWORD}}
+          readinessProbe:
+            httpGet: {path: /health, port: 8002}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /health, port: 8002}
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+          securityContext:
+            allowPrivilegeEscalation: false

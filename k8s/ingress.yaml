@@ -1,0 +1,18 @@
+# All external traffic goes through the API gateway, same as port 9000 in compose.
+# Served by Traefik at http://localhost:8080 (kind-config.yaml maps the NodePort).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api-gateway
+spec:
+  ingressClassName: traefik
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway
+                port:
+                  number: 9000
