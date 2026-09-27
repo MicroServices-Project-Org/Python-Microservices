@@ -207,3 +207,6 @@ marimo/_lsp/
 __marimo__/
 .env
 logs/
+
+# kind/k8s secrets (k8s/secrets.env.example is committed)
+k8s/secrets.env

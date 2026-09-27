@@ -1,0 +1,13 @@
+# Helm values for the Traefik ingress controller (chart traefik/traefik, pinned in deploy.sh).
+# ingress-nginx is archived, so Traefik serves the standard Ingress in ingress.yaml.
+service:
+  type: NodePort
+ports:
+  web:
+    nodePort: 30080   # mapped to localhost:8080 by kind-config.yaml
+  websecure:
+    expose:
+      default: false  # no TLS locally
+ingressClass:
+  enabled: true
+  isDefaultClass: true

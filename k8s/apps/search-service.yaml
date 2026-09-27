@@ -1,0 +1,56 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: search-service
+spec:
+  selector: {app: search-service}
+  ports:
+    - port: 8006
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: search-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: search-service}
+  template:
+    metadata:
+      labels: {app: search-service}
+    spec:
+      enableServiceLinks: false
+      initContainers:
+        - name: wait-for-elasticsearch
+          image: busybox:1.36
+          command: ["sh", "-c", "until wget -q -O /dev/null 'http://elasticsearch:9200/_cluster/health?wait_for_status=yellow&timeout=2s'; do echo waiting for elasticsearch; sleep 2; done"]
+      containers:
+        - name: search-service
+          image: ecommerce/search-service:dev
+          imagePullPolicy: Never   # loaded into kind by deploy.sh
+          ports:
+            - containerPort: 8006
+          env:
+            - {name: SPRING_ELASTICSEARCH_URIS, value: http://elasticsearch:9200}
+            - {name: SPRING_KAFKA_BOOTSTRAP_SERVERS, value: kafka:9092}
+            - {name: PRODUCT_SERVICE_URL, value: http://product-service:8001}
+            - {name: LOG_DIR, value: /tmp/logs}
+            - {name: MANAGEMENT_TRACING_ENABLED, value: "false"}   # no Tempo in the cluster yet
+            - {name: JAVA_TOOL_OPTIONS, value: "-XX:MaxRAMPercentage=75"}
+          # Spring Boot enables these probe groups on Kubernetes. Liveness leaves out
+          # Elasticsearch/Kafka health, so an ES outage doesn't restart the pod.
+          startupProbe:
+            httpGet: {path: /actuator/health/liveness, port: 8006}
+            periodSeconds: 5
+            failureThreshold: 36   # up to 3 minutes for the JVM to start
+          readinessProbe:
+            httpGet: {path: /actuator/health/readiness, port: 8006}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /actuator/health/liveness, port: 8006}
+            periodSeconds: 20
+          resources:
+            requests: {cpu: 100m, memory: 384Mi}
+            limits: {memory: 768Mi}
+          securityContext:
+            allowPrivilegeEscalation: false

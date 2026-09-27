@@ -1,0 +1,11 @@
+# Single-node kind cluster for local development.
+# Traefik's NodePort 30080 is mapped to http://localhost:8080 on the host.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: ecommerce
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      - containerPort: 30080
+        hostPort: 8080
+        protocol: TCP

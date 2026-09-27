@@ -1,0 +1,42 @@
+# Entry point: the Ingress routes all traffic here. Auth is off (no Keycloak in the cluster yet).
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway
+spec:
+  selector: {app: api-gateway}
+  ports:
+    - port: 9000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: api-gateway}
+  template:
+    metadata:
+      labels: {app: api-gateway}
+    spec:
+      enableServiceLinks: false   # injected *_PORT=tcp://... vars would break Settings (e.g. REDIS_PORT)
+      containers:
+        - name: api-gateway
+          image: ecommerce/api-gateway:dev
+          imagePullPolicy: Never   # loaded into kind by deploy.sh
+          ports:
+            - containerPort: 9000
+          envFrom:
+            - configMapRef: {name: app-config}
+          readinessProbe:
+            httpGet: {path: /health, port: 9000}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /health, port: 9000}
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+          securityContext:
+            allowPrivilegeEscalation: false

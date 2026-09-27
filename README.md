@@ -768,6 +768,15 @@ python -m uvicorn app.main:app --port 9000 --loop asyncio
 
 Don't mix the two for the same service: both use the same host ports. Containers call each other by container name (`http://inventory-service:8003`), so a containerized gateway can't reach a service you run on the host instead.
 
+**Option C — Kubernetes on kind:**
+```bash
+docker compose --profile apps down   # free Docker memory first (keeps volumes)
+./k8s/deploy.sh                      # cluster + Traefik + images + manifests
+curl http://localhost:8080/api/products
+kind delete cluster --name ecommerce
+```
+Needs `kind`, `kubectl`, and `helm`. The gateway is served through the Traefik ingress on port **8080**. Auth, tracing, and the observability stack aren't in the cluster yet. See [k8s/README.md](k8s/README.md).
+
 Each Python service logs two init lines on startup:
 ```
 "Logging initialized for <service>"
@@ -928,10 +937,8 @@ Phase 9 ✅ CI/CD
   ├── Ruff lint job (non-blocking initially)
   └── Branch protection on main requires all checks to pass
 
-Future / nice-to-have:
-  - Containerize services (currently run on host for dev iteration speed)
-  - Kafka span propagation (notification + AI consumer spans join the request trace)
-  - OpenTelemetry on Search Service (Java)
+Future / nice-to-have (infra roadmap in KNOWN_ISSUES.md):
+  - Kubernetes: core services on kind done (k8s/); observability + Keycloak next, then Helm, HPAs, EKS
   - Docker image builds in CI → push to ghcr.io
   - Alertmanager + Slack/email routing on metric thresholds
 ```

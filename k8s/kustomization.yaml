@@ -1,0 +1,20 @@
+# kubectl apply -k k8s/  (deploy.sh runs this after creating the Secret and init ConfigMap)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: ecommerce
+resources:
+  - namespace.yaml
+  - config.yaml
+  - infra/postgres.yaml
+  - infra/mongodb.yaml
+  - infra/redis.yaml
+  - infra/elasticsearch.yaml
+  - infra/kafka.yaml
+  - apps/api-gateway.yaml
+  - apps/product-service.yaml
+  - apps/order-service.yaml
+  - apps/inventory-service.yaml
+  - apps/notification-service.yaml
+  - apps/ai-service.yaml
+  - apps/search-service.yaml
+  - ingress.yaml

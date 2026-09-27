@@ -1,0 +1,56 @@
+name: Kubernetes Validation
+
+on:
+  push:
+    branches: ["main", "develop"]
+    paths:
+      - "k8s/**"
+      - "docker/postgres/**"
+      - ".github/workflows/k8s-validate.yml"
+  pull_request:
+    branches: ["main", "develop"]
+    paths:
+      - "k8s/**"
+      - "docker/postgres/**"
+      - ".github/workflows/k8s-validate.yml"
+  workflow_dispatch:
+
+env:
+  KUBECONFORM_VERSION: v0.8.0
+
+jobs:
+  validate-manifests:
+    name: Validate k8s manifests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install kubeconform
+        run: |
+          base="https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}"
+          curl -fsSLO "$base/kubeconform-linux-amd64.tar.gz"
+          curl -fsSL "$base/CHECKSUMS" | grep ' kubeconform-linux-amd64.tar.gz$' | sha256sum -c
+          tar xzf kubeconform-linux-amd64.tar.gz kubeconform
+          sudo mv kubeconform /usr/local/bin/
+
+      - name: Render kustomization
+        run: kubectl kustomize k8s/ > rendered.yaml
+
+      - name: Schema-validate rendered manifests
+        run: kubeconform -strict -summary rendered.yaml
+
+      - name: Every Pod disables service links
+        # Injected *_PORT=tcp://... vars break Settings (REDIS_PORT, POSTGRES_PORT) and the Kafka image
+        run: |
+          missing=$(yq -r 'select(.kind == "Deployment" or .kind == "StatefulSet")
+            | select(.spec.template.spec.enableServiceLinks != false) | .metadata.name' rendered.yaml)
+          if [ -n "$missing" ]; then
+            echo "::error::enableServiceLinks: false missing on: $missing"
+            exit 1
+          fi
+          echo "✅ enableServiceLinks: false on every workload"
+
+      - name: Lint deploy script
+        run: shellcheck k8s/deploy.sh
