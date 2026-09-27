@@ -15,6 +15,10 @@ spring:
       auto-offset-reset: earliest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    listener:
+      # Span per consumed record, continuing the producer's trace from the W3C
+      # traceparent header (product-service's aiokafka instrumentation adds it)
+      observation-enabled: true
 
 management:
   endpoints:
@@ -24,6 +28,13 @@ management:
   endpoint:
     prometheus:
       enabled: true
+  tracing:
+    sampling:
+      probability: 1.0   # dev: keep every trace (matches the Python services)
+  otlp:
+    tracing:
+      # Spring's exporter speaks OTLP over HTTP (4318), not gRPC (4317) like the Python services
+      endpoint: http://localhost:4318/v1/traces
   metrics:
     tags:
       service: search-service

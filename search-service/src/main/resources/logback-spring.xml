@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  JSON logs to stdout + ${LOG_DIR}/search-service.log, with the same field names as the
+  Python services (timestamp, level, logger, message, service, trace_id, span_id), so
+  Promtail ships this file to Loki and Grafana can jump from a log line to its trace.
+
+  LOG_DIR defaults to ../logs (the repo's logs/ when run from search-service/); Docker sets /logs.
+  Rotation matches the Python services: LOG_MAX_BYTES (10 MB) x LOG_BACKUP_COUNT (3) backups.
+  Rotated files are named .log.N, which Promtail's *.log glob doesn't tail.
+-->
+<configuration>
+    <property name="LOG_DIR" value="${LOG_DIR:-../logs}"/>
+    <property name="LOG_MAX_BYTES" value="${LOG_MAX_BYTES:-10485760}"/>
+    <property name="LOG_BACKUP_COUNT" value="${LOG_BACKUP_COUNT:-3}"/>
+
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <fieldNames>
+                <timestamp>timestamp</timestamp>
+                <logger>logger</logger>
+                <version>[ignore]</version>
+                <levelValue>[ignore]</levelValue>
+            </fieldNames>
+            <includeMdcKeyName>traceId</includeMdcKeyName>
+            <includeMdcKeyName>spanId</includeMdcKeyName>
+            <mdcKeyFieldName>traceId=trace_id</mdcKeyFieldName>
+            <mdcKeyFieldName>spanId=span_id</mdcKeyFieldName>
+            <customFields>{"service":"search-service"}</customFields>
+        </encoder>
+    </appender>
+
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_DIR}/search-service.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.FixedWindowRollingPolicy">
+            <fileNamePattern>${LOG_DIR}/search-service.log.%i</fileNamePattern>
+            <minIndex>1</minIndex>
+            <maxIndex>${LOG_BACKUP_COUNT}</maxIndex>
+        </rollingPolicy>
+        <triggeringPolicy class="ch.qos.logback.core.rolling.SizeBasedTriggeringPolicy">
+            <maxFileSize>${LOG_MAX_BYTES}</maxFileSize>
+        </triggeringPolicy>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <fieldNames>
+                <timestamp>timestamp</timestamp>
+                <logger>logger</logger>
+                <version>[ignore]</version>
+                <levelValue>[ignore]</levelValue>
+            </fieldNames>
+            <includeMdcKeyName>traceId</includeMdcKeyName>
+            <includeMdcKeyName>spanId</includeMdcKeyName>
+            <mdcKeyFieldName>traceId=trace_id</mdcKeyFieldName>
+            <mdcKeyFieldName>spanId=span_id</mdcKeyFieldName>
+            <customFields>{"service":"search-service"}</customFields>
+        </encoder>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="STDOUT"/>
+        <appender-ref ref="FILE"/>
+    </root>
+</configuration>

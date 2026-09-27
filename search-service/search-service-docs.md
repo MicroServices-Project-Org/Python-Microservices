@@ -41,13 +41,22 @@ search-service/
 │   │   └── ProductSearchRepository.java    # Spring Data ES repository
 │   ├── service/
 │   │   └── SearchService.java              # Business logic
+│   ├── scheduler/
+│   │   └── DiffReconcileJob.java           # Mongo → ES reconcile job
+│   ├── config/
+│   │   └── ObservationConfig.java          # Don't trace /actuator requests
 │   └── kafka/
 │       └── ProductEventConsumer.java       # Consumes product-updated topic
 ├── src/main/resources/
-│   └── application.yml                     # Configuration
+│   ├── application.yml                     # Configuration (incl. tracing → Tempo on OTLP HTTP 4318)
+│   └── logback-spring.xml                  # JSON logs (stdout + logs/search-service.log) with trace_id/span_id
 ├── src/test/java/com/ecommerce/search/
-│   └── service/
-│       └── SearchServiceTest.java          # 15 JUnit 5 + Mockito tests
+│   ├── service/
+│   │   └── SearchServiceTest.java          # JUnit 5 + Mockito tests
+│   ├── scheduler/
+│   │   └── DiffReconcileJobTest.java
+│   └── config/
+│       └── ObservationConfigTest.java
 ├── pom.xml                                 # Maven build
 └── Dockerfile
 ```
