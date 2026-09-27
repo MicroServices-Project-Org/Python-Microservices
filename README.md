@@ -83,7 +83,7 @@ A production-grade microservices architecture built with **FastAPI**, **Spring B
 | **AI Service** | Recommendations, chatbot, smart search | Redis DB 1 (cache) | 8005 | Python | ✅ Complete |
 | **Search Service** | Full-text search, autocomplete, filters, diff-and-reconcile | Elasticsearch | 8006 | Java | ✅ Complete |
 
-All 7 services expose Prometheus metrics, emit JSON logs to Loki, and (Python services) export OpenTelemetry traces to Tempo.
+All 7 services expose Prometheus metrics, emit JSON logs to Loki, and export OpenTelemetry traces to Tempo.
 
 ---
 
@@ -105,7 +105,7 @@ All 7 services expose Prometheus metrics, emit JSON logs to Loki, and (Python se
 | **Authentication** | Keycloak 24.0 (OAuth2 / JWT) + PyJWT |
 | **Rate Limiting** | slowapi |
 | **Resilience** | tenacity (retry), custom async circuit breaker, Spring `@Scheduled` (diff-and-reconcile) |
-| **Observability** | Prometheus 2.51, Grafana 10.4, Loki 2.9, Tempo 2.4, Promtail, Micrometer, prometheus-fastapi-instrumentator, OpenTelemetry (FastAPI + httpx + logging + aiokafka instrumentation) |
+| **Observability** | Prometheus 2.51, Grafana 10.4, Loki 2.9, Tempo 2.4, Promtail, Micrometer, prometheus-fastapi-instrumentator, OpenTelemetry (FastAPI + httpx + logging + aiokafka instrumentation), Micrometer Tracing (OTel bridge) + logstash-logback-encoder in Search |
 | **CI/CD** | GitHub Actions (matrix-based parallel testing, pip + Maven caching, ruff lint) |
 | **Containerization** | Docker, Docker Compose |
 | **Testing** | pytest, pytest-asyncio, unittest.mock, JUnit 5, Mockito |
@@ -549,6 +549,8 @@ Every Python service is instrumented with **OpenTelemetry** auto-instrumentation
 - `AIOKafkaInstrumentor` — Kafka producer/consumer spans (where applicable)
 
 Spans are exported via OTLP gRPC to Tempo on `localhost:4317`. The `service.name` resource attribute tags each span.
+
+The **Search Service** (Java) uses Micrometer Tracing with the OpenTelemetry bridge. It exports over **OTLP HTTP** to `localhost:4318/v1/traces` (`management.otlp.tracing.endpoint`; `tempo:4318` in Docker) and creates spans for incoming requests, the `product-updated` consumer (continuing product-service's trace from the Kafka `traceparent` header), and each reconcile run, including its calls to Product Service. `/actuator/*` requests are not traced (`config/ObservationConfig.java`). Its logs are JSON with the same fields as the Python services (`logback-spring.xml`), written to stdout and `logs/search-service.log`.
 
 **One trace, multiple services:** A single `POST /api/orders` request produces ~18 spans across 3 services (api-gateway → order-service → inventory-service), visible as a single waterfall in Grafana → Explore → Tempo.
 

@@ -60,14 +60,14 @@ Do these in order. Each step depends on the ones before it. The status of each w
 - [x] Secrets come from the optional `env_file: <service>/.env`. Nothing is baked into images (`.dockerignore` excludes `.env*`).
 - [x] `docker-validate.yml` checks the app services are defined and builds all 7 images.
 
-## TODO 3 — OpenTelemetry on Search Service (Java) · *not started*
+## TODO 3 — OpenTelemetry on Search Service (Java) · *done (#42)*
 
-**Status:** `pom.xml` has Actuator and Micrometer Prometheus but no tracing dependency, so traces stop at the gateway → search hop.
+**Status:** search-service exports traces to Tempo and writes JSON logs with `trace_id`/`span_id` that Promtail ships to Loki.
 
-- [ ] Add `micrometer-tracing-bridge-otel` and `opentelemetry-exporter-otlp`, or attach the OTel Java agent.
-- [ ] Configure `management.otlp.tracing.endpoint` (note: Spring's OTLP exporter defaults to **HTTP on 4318**, not gRPC on 4317). Set `management.tracing.sampling.probability: 1.0` for dev.
-- [ ] Add `traceId`/`spanId` to the Logback pattern, ideally as JSON, so logs from search correlate in Loki the same way the Python services do.
-- [ ] Check that the `product-updated` Kafka consumer and the `RestTemplate` calls in the reconcile job produce spans. `RestTemplate` must be built from `RestTemplateBuilder` for instrumentation to apply.
+- [x] Added `micrometer-tracing-bridge-otel` and `opentelemetry-exporter-otlp` (versions from the Boot BOM).
+- [x] `management.otlp.tracing.endpoint: http://localhost:4318/v1/traces` (OTLP HTTP; compose sets `tempo:4318`), sampling `1.0`. `/actuator/*` isn't traced, so healthchecks and Prometheus scrapes don't flood Tempo.
+- [x] `logback-spring.xml` with `logstash-logback-encoder`: JSON with the Python field names, to stdout and `${LOG_DIR}/search-service.log` (10 MB x 3 rotation). Compose now mounts `./logs` for search too.
+- [x] Checked in Tempo: gateway → search is one trace; `POST /api/products` → `product-updated send` → search's `product-updated receive` is one trace (`spring.kafka.listener.observation-enabled`); each reconcile run is a root span whose `RestTemplate` call continues into product-service.
 
 ## TODO 4 — Port to Kubernetes (kind) · *not started*
 

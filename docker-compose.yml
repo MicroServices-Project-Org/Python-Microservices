@@ -432,8 +432,10 @@ services:
     container_name: search-service
     ports:
       - "8006:8006"
-    volumes: []   # logs to stdout only (no log file), same as on the host
     environment:
+      LOG_DIR: /logs
+      # Spring exports OTLP over HTTP (4318); the Python services use gRPC on 4317
+      MANAGEMENT_OTLP_TRACING_ENDPOINT: http://tempo:4318/v1/traces
       SPRING_ELASTICSEARCH_URIS: http://elasticsearch:9200
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       PRODUCT_SERVICE_URL: http://product-service:8001
