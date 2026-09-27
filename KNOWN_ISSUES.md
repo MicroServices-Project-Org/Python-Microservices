@@ -35,16 +35,16 @@ None right now.
 
 Do these in order. Each step depends on the ones before it. The status of each was last checked against the repo on 2026-09-26.
 
-## TODO 1 — Named volumes in Docker Compose · *mostly done*
+## TODO 1 — Named volumes in Docker Compose · *done (#41)*
 
-**Status:** `mongo_data`, `postgres_data`, `prometheus_data`, `grafana_data`, `loki_data`, and `tempo_data` are already declared and mounted, so the core databases already survive `docker-compose down`/`up`. (`down -v` wipes them.)
+**Status:** every stateful container has a named volume, so `docker compose down`/`up` keeps all data. Only `down -v` wipes it. Checked live: after `down`/`up`, the Elasticsearch index, Redis idempotency keys, Kafka topics and consumer offsets, and Postgres stock were all still there, and notification replayed nothing.
 
-**Remaining gaps:**
-- [x] **Keycloak:** fixed in PR #21, which switched to `KC_DB: dev-file` and mounted `keycloak_data:/opt/keycloak/data`.
-- [ ] **Elasticsearch:** no volume, so the index is rebuilt on restart. The reconcile job recovers it from Mongo within about 60s, so this is optional. Add `es_data:/usr/share/elasticsearch/data` if you want it to persist.
-- [ ] **Redis:** no volume, so notification idempotency keys are lost on restart. That could cause duplicate emails if Kafka redelivers. (The AI cache in DB 1 is safe to lose, it just refills.) Add `redis_data:/data` and consider `--appendonly yes`.
-- [ ] **Kafka/Zookeeper:** no volumes, so topics and consumer offsets are lost on restart. Undelivered events are safe because of the outbox, but consumers with `auto-offset-reset: earliest` will replay messages.
-- [ ] If you add volumes, also add them to `REQUIRED_VOLUMES` in `.github/workflows/docker-validate.yml`.
+- [x] Mongo, Postgres, Prometheus, Grafana, Loki, Tempo: already had volumes.
+- [x] Keycloak: `keycloak_data` with `KC_DB: dev-file` (#21).
+- [x] Elasticsearch: `es_data`, so the index survives without waiting for the reconcile job.
+- [x] Redis: `redis_data` plus `--appendonly yes`, so notification's idempotency keys survive restarts (no duplicate emails on Kafka redelivery).
+- [x] Kafka/Zookeeper: `kafka_data`, `zookeeper_data`, `zookeeper_log`. These must be kept or wiped **together**: Kafka's `meta.properties` holds the cluster ID from Zookeeper, and a mismatch (`InconsistentClusterIdException`) stops Kafka from starting. To reset only Kafka, remove all three volumes.
+- [x] All of them are in `REQUIRED_VOLUMES` in `docker-validate.yml`.
 
 ## TODO 2 — All 7 app services in Docker Compose · *done (#40)*
 

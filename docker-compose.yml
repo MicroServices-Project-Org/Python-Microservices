@@ -17,6 +17,13 @@ volumes:
   grafana_data:
   loki_data:
   tempo_data:
+  # Kafka and Zookeeper must persist together: Kafka's meta.properties stores the
+  # cluster ID that Zookeeper hands out, and a mismatch stops Kafka from starting.
+  zookeeper_data:
+  zookeeper_log:
+  kafka_data:
+  redis_data:
+  es_data:
 
 # ─────────────────────────────────────────────
 # Shared settings for the app services (profile "apps")
@@ -102,6 +109,9 @@ services:
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_log:/var/lib/zookeeper/log
     networks:
       - microservices-net
     healthcheck:
@@ -126,6 +136,8 @@ services:
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    volumes:
+      - kafka_data:/var/lib/kafka/data   # topics + consumer offsets
     networks:
       - microservices-net
     healthcheck:
@@ -271,8 +283,13 @@ services:
     image: redis:7.2
     container_name: redis
     restart: unless-stopped
+    # Append-only file: notification's idempotency keys (DB 0) survive restarts,
+    # so a Kafka redelivery can't send the same email twice.
+    command: ["redis-server", "--appendonly", "yes"]
     ports:
       - "6379:6379"
+    volumes:
+      - redis_data:/data
     networks:
       - microservices-net
     healthcheck:
@@ -295,6 +312,8 @@ services:
       - discovery.type=single-node
       - xpack.security.enabled=false
       - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
     networks:
       - microservices-net
     healthcheck:

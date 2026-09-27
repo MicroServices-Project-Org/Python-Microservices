@@ -76,6 +76,12 @@ jobs:
             "grafana_data"
             "loki_data"
             "tempo_data"
+            "keycloak_data"
+            "zookeeper_data"
+            "zookeeper_log"
+            "kafka_data"
+            "redis_data"
+            "es_data"
           )
           for vol in "${REQUIRED_VOLUMES[@]}"; do
             if docker compose config | grep -q "${vol}:"; then
